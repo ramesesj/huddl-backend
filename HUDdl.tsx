@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8787";
+const API_BASE = "https://huddl-backend.onrender.com";
 
 // HUD layer color mapping
 const HUD_LAYER_COLORS: Record<string, string> = {
