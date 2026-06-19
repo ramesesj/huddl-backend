@@ -87,6 +87,18 @@ WEB_URLS: list[str] = [
     "https://www.livermoregardensapts.com/apartments/ca/livermore/floor-plans",
     "https://www.electriclofts.com/floorplans",
     "https://www.apartments.com/alameda-county-ca/",
+    "https://adventpropertiesinc.com/rentals-residential",
+    "https://affordablehousingonline.com/housing-search/California/Alameda-County",
+    "https://www.apartmentlist.com/ca/alameda-county",
+    "https://www.apartments.com/alameda-county-ca/",
+    "https://www.crpmrealty.com/availability?city=Emeryville%2CHayward%2COakland%2CRichmond%2CSan++Pablo%2CSan+Leandro",
+    "https://www.kands.com/vacancies?type=Residential&city=Alameda%2CBerkelely%2CBerkeley%2CEl+Cerrito%2COakland%2CRichmond",
+    "https://www.realtor.com/rentals",
+    "https://norcalrealty.us/listings-page/",
+    "https://www.ptlamgmt.com/Apartments/module/properties/?category=890&zoom=4&lat=41.76712824980706&lng=-119.5748764#category%3D890%26avail_units%3D1%26zoom%3D9%26lat%3D37.71351068293891%26lng%3D-121.99438425",
+    "https://www.rent.com/",
+    "https://www.laphamcompany.com/properties-available?combine=&term_node_tid_depth=All&field_rent_value=All&field_bedrooms_value=1&field_bathrooms_value=1&field_rent_value_1=All&field_deposit_value=All&field_cats_allowed_value=All&field_dogs_allowed_value=All&field_parking_value=All
+",
 ]
 
 # Direct download URLs — verified June 2026
