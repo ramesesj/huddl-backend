@@ -656,8 +656,7 @@ _cache: list[dict] = []
 
 
 def _cors(h):
-    origin = os.environ.get("ALLOWED_ORIGIN", "*")
-    h.send_header("Access-Control-Allow-Origin", origin)
+    h.send_header("Access-Control-Allow-Origin", "*")
     h.send_header("Access-Control-Allow-Headers", "Content-Type")
     h.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
