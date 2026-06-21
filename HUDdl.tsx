@@ -1,4 +1,4 @@
-/**
+**
  * HUDdl.tsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Frontend for HUDdl.py — the combined Bay Area housing crawler + HUD data app.
@@ -23,7 +23,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "https://huddl-backend.onrender.com";
+const API_BASE = "http://localhost:8787";
 
 // HUD layer color mapping
 const HUD_LAYER_COLORS: Record<string, string> = {
@@ -324,6 +324,70 @@ const iCls = "w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text
 const btnPri = "px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
 const btnSec = "px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition";
 
+// ─── SearchingState ───────────────────────────────────────────────────────────
+const SEARCH_PHRASES = [
+  "Scanning available listings…",
+  "Checking rental vacancies…",
+  "Searching affordable housing programs…",
+  "Looking up Section 8 properties…",
+  "Finding LIHTC developments…",
+  "Reviewing public housing availability…",
+  "Locating HUD-assisted properties…",
+  "Browsing Bay Area apartments…",
+  "Discovering housing opportunities…",
+  "Matching properties to your search…",
+  "Connecting to housing databases…",
+  "Pulling the latest listings…",
+];
+
+function SearchingState() {
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  const [dot, setDot]             = useState(0);
+
+  useEffect(() => {
+    const phraseTimer = setInterval(() =>
+      setPhraseIdx((i) => (i + 1) % SEARCH_PHRASES.length), 2200);
+    const dotTimer = setInterval(() =>
+      setDot((d) => (d + 1) % 4), 500);
+    return () => { clearInterval(phraseTimer); clearInterval(dotTimer); };
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-28 gap-4">
+      {/* Animated magnifying glass — no spider */}
+      <div className="relative w-16 h-16">
+        <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-ping opacity-30" />
+        <div className="w-16 h-16 rounded-full bg-blue-50 border-2 border-blue-300 flex items-center justify-center text-3xl select-none">
+          🔍
+        </div>
+      </div>
+
+      {/* Rotating real-estate phrase */}
+      <div className="text-center">
+        <p className="text-sm font-medium text-slate-600 transition-all duration-500 min-h-[1.5rem]">
+          {SEARCH_PHRASES[phraseIdx]}{"·".repeat(dot)}
+        </p>
+        <p className="text-xs text-slate-300 mt-1">
+          Searching over 25 sites + HUD databases · takes ~30 seconds
+        </p>
+      </div>
+
+      {/* Progress bar */}
+      <div className="w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full bg-blue-400 rounded-full animate-[progress_30s_linear_forwards]"
+             style={{ animation: "progress 30s linear forwards" }} />
+      </div>
+
+      <style>{`
+        @keyframes progress {
+          from { width: 2%; }
+          to   { width: 98%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function HUDdl() {
   const [allListings, setAllListings] = useState<Listing[]>([]);
@@ -405,7 +469,7 @@ export default function HUDdl() {
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, address, program, bedrooms…"
+              placeholder="Search by city, zip, bedrooms, program, address…"
               className="w-full pl-9 pr-9 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 transition"
               aria-label="Search listings"
             />
@@ -437,8 +501,8 @@ export default function HUDdl() {
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition shadow disabled:opacity-60 disabled:cursor-wait"
             >
               {loading
-                ? <><span className="animate-spin">⟳</span> Crawling…</>
-                : <>⟳ {crawled ? "Re-crawl" : "Start Crawl"}</>
+                ? <><span className="animate-spin">⟳</span> Searching…</>
+                : <>⟳ {crawled ? "Search Again" : "Start Search"}</>
               }
             </button>
           </div>
@@ -512,21 +576,13 @@ export default function HUDdl() {
             <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-4">H</div>
             <p className="text-lg font-semibold text-slate-700">HUDdl is ready</p>
             <p className="text-sm text-slate-400 mt-1 max-w-sm">
-              Crawls 25 Bay Area housing sites <em>and</em> HUD's official ArcGIS database — all in one search.
+              Crawls over 25 Bay Area housing sites <em>and</em> HUD's official database — all in one search.
             </p>
-            <p className="text-xs text-slate-300 mt-4">Press <strong>Start Crawl</strong> to begin · takes ~30 seconds</p>
+            <p className="text-xs text-slate-300 mt-4">Press <strong>Start Search</strong> to begin · takes ~30 seconds</p>
           </div>
         )}
 
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-28 gap-3">
-            <span className="text-4xl animate-bounce">🕷</span>
-            <p className="text-sm font-medium animate-pulse text-slate-500">
-              Crawling 25 web sites + 6 HUD data layers…
-            </p>
-            <p className="text-xs text-slate-300">This takes about 20–40 seconds</p>
-          </div>
-        )}
+        {loading && <SearchingState />}
 
         {/* Results grid */}
         {!loading && crawled && (
