@@ -1,4 +1,4 @@
-**
+/**
  * HUDdl.tsx
  * ─────────────────────────────────────────────────────────────────────────────
  * Frontend for HUDdl.py — the combined Bay Area housing crawler + HUD data app.
@@ -21,6 +21,71 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+
+// ─── Logo component (inline SVG — no external file needed) ───────────────────
+function HudLogo({ size = 40 }: { size?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 520" width={size} height={size}>
+      <defs>
+        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#4a90d9",stopOpacity:1}} />
+          <stop offset="100%" style={{stopColor:"#1a4fa0",stopOpacity:1}} />
+        </linearGradient>
+        <linearGradient id="roofGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#2563b0",stopOpacity:1}} />
+          <stop offset="100%" style={{stopColor:"#0f3070",stopOpacity:1}} />
+        </linearGradient>
+        <linearGradient id="sideGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style={{stopColor:"#1a4fa0",stopOpacity:1}} />
+          <stop offset="100%" style={{stopColor:"#3070c0",stopOpacity:1}} />
+        </linearGradient>
+        <linearGradient id="shimmer" x1="0%" y1="0%" x2="60%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#c8dff8",stopOpacity:0.45}} />
+          <stop offset="100%" style={{stopColor:"#1a4fa0",stopOpacity:0}} />
+        </linearGradient>
+        <linearGradient id="windowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#e8f3ff",stopOpacity:1}} />
+          <stop offset="100%" style={{stopColor:"#b8d4f0",stopOpacity:1}} />
+        </linearGradient>
+      </defs>
+      <ellipse cx="260" cy="490" rx="185" ry="14" fill="#1040a0" opacity="0.25"/>
+      <rect x="135" y="148" width="38" height="70" rx="4" fill="#1a4fa0"/>
+      <rect x="129" y="142" width="50" height="12" rx="3" fill="#2560b0"/>
+      <rect x="135" y="148" width="12" height="60" rx="2" fill="#4a80d0" opacity="0.4"/>
+      <rect x="338" y="155" width="34" height="62" rx="4" fill="#1a4fa0"/>
+      <rect x="332" y="149" width="46" height="11" rx="3" fill="#2560b0"/>
+      <rect x="338" y="155" width="10" height="55" rx="2" fill="#4a80d0" opacity="0.4"/>
+      <rect x="78" y="295" width="364" height="185" rx="6" fill="url(#bodyGrad)"/>
+      <polygon points="78,295 200,295 78,420" fill="url(#shimmer)" opacity="0.6"/>
+      <polygon points="55,308 260,158 260,308" fill="url(#roofGrad)"/>
+      <polygon points="260,158 465,308 260,308" fill="url(#sideGrad)"/>
+      <polygon points="55,308 260,156 270,162 65,314" fill="white" opacity="0.85"/>
+      <polygon points="455,308 260,156 250,162 445,314" fill="white" opacity="0.7"/>
+      <line x1="260" y1="156" x2="260" y2="168" stroke="white" strokeWidth="3" opacity="0.6"/>
+      <polygon points="80,306 160,230 160,306" fill="#6aaae0" opacity="0.18"/>
+      <polygon points="215,225 260,190 305,225" fill="#1a4fa0"/>
+      <rect x="227" y="216" width="66" height="52" rx="4" fill="url(#windowGrad)"/>
+      <line x1="260" y1="216" x2="260" y2="268" stroke="#8ab8e0" strokeWidth="2.5"/>
+      <line x1="227" y1="240" x2="293" y2="240" stroke="#8ab8e0" strokeWidth="2.5"/>
+      <polygon points="229,218 248,218 229,238" fill="white" opacity="0.35"/>
+      <rect x="104" y="330" width="88" height="80" rx="5" fill="url(#windowGrad)"/>
+      <line x1="148" y1="330" x2="148" y2="410" stroke="#8ab8e0" strokeWidth="3"/>
+      <line x1="104" y1="368" x2="192" y2="368" stroke="#8ab8e0" strokeWidth="3"/>
+      <polygon points="106,332 128,332 106,356" fill="white" opacity="0.4"/>
+      <rect x="328" y="330" width="88" height="80" rx="5" fill="url(#windowGrad)"/>
+      <line x1="372" y1="330" x2="372" y2="410" stroke="#8ab8e0" strokeWidth="3"/>
+      <line x1="328" y1="368" x2="416" y2="368" stroke="#8ab8e0" strokeWidth="3"/>
+      <polygon points="330,332 352,332 330,356" fill="white" opacity="0.4"/>
+      <rect x="222" y="358" width="76" height="122" rx="6" fill="#1040a0"/>
+      <rect x="228" y="362" width="64" height="116" rx="5" fill="#1855b0"/>
+      <polygon points="230,364 252,364 230,395" fill="#6090d8" opacity="0.35"/>
+      <circle cx="280" cy="422" r="7" fill="#ddeeff" opacity="0.85"/>
+      <circle cx="280" cy="422" r="4" fill="white" opacity="0.6"/>
+      <rect x="65" y="476" width="390" height="12" rx="4" fill="#1648a0" opacity="0.7"/>
+      <rect x="80" y="484" width="360" height="8" rx="3" fill="#1040a0" opacity="0.5"/>
+    </svg>
+  );
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const API_BASE = "http://localhost:8787";
@@ -354,11 +419,11 @@ function SearchingState() {
 
   return (
     <div className="flex flex-col items-center justify-center py-28 gap-4">
-      {/* Animated magnifying glass — no spider */}
-      <div className="relative w-16 h-16">
-        <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-ping opacity-30" />
-        <div className="w-16 h-16 rounded-full bg-blue-50 border-2 border-blue-300 flex items-center justify-center text-3xl select-none">
-          🔍
+      {/* Animated logo */}
+      <div className="relative w-20 h-20">
+        <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-ping opacity-20" />
+        <div className="w-20 h-20 drop-shadow-md animate-bounce">
+          <HudLogo size={80} />
         </div>
       </div>
 
@@ -455,7 +520,9 @@ export default function HUDdl() {
 
           {/* Logo */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm">H</div>
+            <div className="w-9 h-9">
+              <HudLogo size={36} />
+            </div>
             <div>
               <h1 className="text-sm font-bold text-slate-800 leading-none">HUDdl</h1>
               <p className="text-[10px] text-slate-400">Alameda County Housing Data</p>
@@ -573,10 +640,12 @@ export default function HUDdl() {
         {/* Empty / loading state */}
         {!crawled && !loading && (
           <div className="flex flex-col items-center justify-center py-28 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-3xl font-bold mb-4">H</div>
+            <div className="w-20 h-20 mb-4 drop-shadow-lg">
+              <HudLogo size={80} />
+            </div>
             <p className="text-lg font-semibold text-slate-700">HUDdl is ready</p>
             <p className="text-sm text-slate-400 mt-1 max-w-sm">
-              Crawls over 25 Bay Area housing sites <em>and</em> HUD's official database — all in one search.
+              Crawls over 25 Bay Area housing sites <em>and</em> HUD's official ArcGIS database — all in one search.
             </p>
             <p className="text-xs text-slate-300 mt-4">Press <strong>Start Search</strong> to begin · takes ~30 seconds</p>
           </div>
