@@ -14,7 +14,7 @@
  * Setup:
  *   1. python HUDdl.py              (starts the API on port 8787)
  *   2. npm run dev                  (starts this frontend on port 5173)
- *   3. Open http://localhost:5173
+ *   3. Open http://lcocalhost:5173
  *
  * Dependencies: React 18+, Tailwind CSS
  * ─────────────────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ function HudLogo({ size = 40 }: { size?: number }) {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8787";
+const API_BASE = "https://huddl-backend.onrender.com";
 
 // HUD layer color mapping
 const HUD_LAYER_COLORS: Record<string, string> = {
