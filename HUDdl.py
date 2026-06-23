@@ -48,7 +48,8 @@ WEB_URLS: list[str] = [
     "https://www.oaklandpropertymanagement.co/tenants/",
     "https://www.livermoregardensapts.com/apartments/ca/livermore/floor-plans",
     "https://www.electriclofts.com/floorplans",
-    "https://www.apartments.com/alameda-county-ca/",
+    "https://www.apartments.com/alameda-county-ca/"
+    "https://housingbayarea.mtc.ca.gov/listings",
 ]
 
 BROWSER_HEADERS = {
