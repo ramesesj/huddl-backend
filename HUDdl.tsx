@@ -14,7 +14,7 @@
  * Setup:
  *   1. python HUDdl.py              (starts the API on port 8787)
  *   2. npm run dev                  (starts this frontend on port 5173)
- *   3. Open http://lcocalhost:5173
+ *   3. Open http://localhost:5173
  *
  * Dependencies: React 18+, Tailwind CSS
  * ─────────────────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ function HudLogo({ size = 40 }: { size?: number }) {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "https://huddl-backend.onrender.com";
+const API_BASE = "http://localhost:8787";
 
 // HUD layer color mapping
 const HUD_LAYER_COLORS: Record<string, string> = {
@@ -101,22 +101,25 @@ const HUD_LAYER_COLORS: Record<string, string> = {
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface Listing {
+interface Unit {
   source: "web" | "hud";
+  hud_layer: string;
+  hud_program: string;
+  property_name: string;
+  unit_label: string;
   url: string;
-  title: string;
   address: string;
   city: string;
   state: string;
   zip_code: string;
   phone: string;
   email: string;
-  price_range: string;
-  bedrooms: string[];
-  units: string;
+  price: string;
+  bedrooms: string;
+  bathrooms: string;
+  sqft: string;
+  availability: string;
   description: string;
-  hud_layer: string;
-  hud_program: string;
   status: "ok" | "error" | "timeout";
 }
 
@@ -144,16 +147,16 @@ function useDebounce<T>(value: T, delay = 350): T {
 }
 
 // ─── EmailModal ───────────────────────────────────────────────────────────────
-function EmailModal({ listing, onClose }: { listing: Listing; onClose: () => void }) {
+function EmailModal({ unit, onClose }: { unit: Unit; onClose: () => void }) {
   const [form, setForm] = useState<EmailPayload>({
     smtp_host: "smtp.gmail.com",
     smtp_port: 587,
     smtp_user: "",
     smtp_password: "",
     from: "",
-    to: listing.email,
-    subject: `Housing Inquiry – ${listing.title}`,
-    body: `Hello,\n\nI am interested in a unit at ${listing.title}${listing.address ? ` (${listing.address})` : ""}.\nCould you please share availability and pricing?\n\nThank you.`,
+    to: unit.email,
+    subject: `Housing Inquiry – ${unit.property_name}${unit.unit_label ? " · " + unit.unit_label : ""}`,
+    body: `Hello,\n\nI am interested in the ${unit.unit_label || "unit"} at ${unit.property_name}${unit.address ? ` (${unit.address})` : ""}.\nCould you please share availability and pricing?\n\nThank you.`,
   });
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -187,7 +190,7 @@ function EmailModal({ listing, onClose }: { listing: Listing; onClose: () => voi
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
             <h2 className="text-lg font-semibold text-slate-800">Send Inquiry</h2>
-            <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{listing.title}</p>
+            <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{unit.property_name}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl" aria-label="Close">✕</button>
         </div>
@@ -248,126 +251,138 @@ function EmailModal({ listing, onClose }: { listing: Listing; onClose: () => voi
   );
 }
 
-// ─── ListingCard ──────────────────────────────────────────────────────────────
-function ListingCard({ listing, onEmail }: { listing: Listing; onEmail: (l: Listing) => void }) {
-  const [callStatus, setCallStatus] = useState<string | null>(null);
-  const isHUD = listing.source === "hud";
-  const isError = listing.status !== "ok" && !isHUD;
-
-  const handleVoIP = async () => {
-    if (!listing.phone) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/voip?phone=${encodeURIComponent(listing.phone)}`);
-      const data = await res.json();
-      if (data.ok && data.tel_uri) {
-        window.location.href = data.tel_uri;
-        setCallStatus("Dialing…");
-      } else {
-        setCallStatus(data.message || "Failed");
-      }
-    } catch {
-      window.location.href = `tel:${listing.phone.replace(/\D/g, "")}`;
-      setCallStatus("Dialing…");
-    }
-    setTimeout(() => setCallStatus(null), 3000);
-  };
-
-  const domain = listing.url
-    ? new URL(listing.url.startsWith("http") ? listing.url : `https://${listing.url}`).hostname.replace(/^www\./, "")
-    : null;
-
-  const layerColor = listing.hud_layer
-    ? HUD_LAYER_COLORS[listing.hud_layer] ?? "bg-slate-100 text-slate-600"
+// ─── UnitCard ─────────────────────────────────────────────────────────────────
+function UnitCard({ unit, onEmail }: { unit: Unit; onEmail: (u: Unit) => void }) {
+  const isHUD   = unit.source === "hud";
+  const isError = unit.status !== "ok" && !isHUD;
+  const layerColor = unit.hud_layer
+    ? HUD_LAYER_COLORS[unit.hud_layer] ?? "bg-slate-100 text-slate-600"
     : "";
 
+  const domain = unit.url
+    ? (() => { try { return new URL(unit.url.startsWith("http") ? unit.url : `https://${unit.url}`).hostname.replace(/^www\./, ""); } catch { return unit.url; } })()
+    : null;
+
+  const availColor =
+    /available\s*now|immediate|leasing\s*now|move.in/i.test(unit.availability)
+      ? "text-emerald-600 bg-emerald-50"
+      : /waiting|coming\s*soon/i.test(unit.availability)
+      ? "text-amber-600 bg-amber-50"
+      : "text-slate-500 bg-slate-100";
+
   return (
-    <article className={`bg-white rounded-2xl border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${isError ? "opacity-60 border-slate-200" : "border-slate-200 shadow-sm"}`}>
-      {/* Top bar */}
-      <div className="flex items-start justify-between px-5 pt-4 pb-1 gap-2">
+    <article className={`bg-white rounded-2xl border flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${isError ? "opacity-60 border-slate-200" : "border-slate-200 shadow-sm"}`}>
+
+      {/* ── Top badges ── */}
+      <div className="flex items-start justify-between px-4 pt-3 pb-1 gap-2">
         <div className="flex flex-wrap gap-1.5">
-          {/* Source badge */}
           <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${isHUD ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
             {isHUD ? "HUD" : "Web"}
           </span>
-          {/* HUD layer badge */}
-          {listing.hud_layer && (
+          {unit.hud_layer && (
             <span className={`text-[10px] font-medium rounded-full px-2 py-0.5 ${layerColor}`}>
-              {listing.hud_layer}
+              {unit.hud_layer}
             </span>
           )}
-          {isError && (
-            <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-medium">
-              Unavailable
-            </span>
-          )}
+          {isError && <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Unavailable</span>}
         </div>
-        {listing.price_range && (
-          <span className="shrink-0 text-xs bg-emerald-50 text-emerald-700 font-semibold rounded-full px-2 py-0.5">
-            {listing.price_range}
+        {/* Price — prominent */}
+        {unit.price && (
+          <span className="shrink-0 text-sm font-bold text-emerald-700 bg-emerald-50 rounded-lg px-2.5 py-0.5">
+            {unit.price}
           </span>
         )}
       </div>
 
-      {/* Title + address */}
-      <div className="px-5 pb-1">
-        <h3 className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2">
-          {listing.title || domain || "Unknown Property"}
+      {/* ── Unit label (bed/bath/sqft) — headline ── */}
+      <div className="px-4 pb-1">
+        <h3 className="text-base font-bold text-slate-800 leading-tight">
+          {unit.unit_label || "Unit"}
         </h3>
-        {listing.address && (
-          <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1 line-clamp-1">
-            📍 {listing.address}
-          </p>
+        {/* Property name as sub-heading */}
+        <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">
+          {unit.property_name}
+        </p>
+      </div>
+
+      {/* ── Detail chips ── */}
+      <div className="px-4 pt-1 flex flex-wrap gap-1.5">
+        {unit.bedrooms && (
+          <span className="text-[11px] bg-indigo-50 text-indigo-700 rounded-md px-2 py-0.5 font-medium">
+            {unit.bedrooms} Bed
+          </span>
+        )}
+        {unit.bathrooms && (
+          <span className="text-[11px] bg-indigo-50 text-indigo-700 rounded-md px-2 py-0.5 font-medium">
+            {unit.bathrooms} Bath
+          </span>
+        )}
+        {unit.sqft && (
+          <span className="text-[11px] bg-slate-100 text-slate-600 rounded-md px-2 py-0.5">
+            {unit.sqft} sq ft
+          </span>
+        )}
+        {unit.availability && (
+          <span className={`text-[11px] rounded-md px-2 py-0.5 font-medium ${availColor}`}>
+            {unit.availability}
+          </span>
         )}
       </div>
 
-      {/* Metadata chips */}
-      <div className="px-5 pt-1.5 flex flex-wrap gap-1.5">
-        {listing.bedrooms.map((b) => (
-          <span key={b} className="text-[11px] bg-indigo-50 text-indigo-600 rounded-md px-2 py-0.5 font-medium">{b}</span>
-        ))}
-        {listing.units && (
-          <span className="text-[11px] bg-slate-100 text-slate-600 rounded-md px-2 py-0.5">{listing.units} units</span>
-        )}
-        {listing.hud_program && !listing.hud_program.includes(listing.hud_layer) && (
-          <span className="text-[11px] bg-violet-50 text-violet-700 rounded-md px-2 py-0.5">{listing.hud_program}</span>
-        )}
-      </div>
-
-      {/* Description */}
-      {listing.description && (
-        <p className="px-5 pt-2 text-xs text-slate-400 line-clamp-2 leading-relaxed">
-          {listing.description}
+      {/* ── Address ── */}
+      {(unit.address || unit.city) && (
+        <p className="px-4 pt-1.5 text-xs text-slate-500 flex items-center gap-1">
+          📍 {[unit.address, unit.city, unit.state, unit.zip_code].filter(Boolean).join(", ")}
         </p>
       )}
 
-      {/* Actions */}
-      <div className="px-5 py-3 mt-1 flex items-center gap-2 border-t border-slate-100">
-        <button
-          onClick={handleVoIP}
-          disabled={!listing.phone}
-          title={listing.phone || "No phone found"}
-          className={`flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-all ${listing.phone ? "bg-sky-500 hover:bg-sky-600 text-white shadow-sm" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
-        >
-          📞 {callStatus ?? (listing.phone ? "Call" : "No Phone")}
-        </button>
+      {/* ── Description ── */}
+      {unit.description && (
+        <p className="px-4 pt-1 text-xs text-slate-400 line-clamp-2 leading-relaxed">
+          {unit.description}
+        </p>
+      )}
 
-        <button
-          onClick={() => onEmail(listing)}
-          disabled={!listing.email}
-          title={listing.email || "No email found"}
-          className={`flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-all ${listing.email ? "bg-indigo-500 hover:bg-indigo-600 text-white shadow-sm" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
-        >
-          ✉ {listing.email ? "Email" : "No Email"}
-        </button>
+      {/* ── Spacer ── */}
+      <div className="flex-1" />
 
+      {/* ── Footer: phone, email, prominent link ── */}
+      <div className="px-4 py-3 mt-2 border-t border-slate-100 space-y-2">
+
+        {/* Phone as text */}
+        {unit.phone && (
+          <div className="flex items-center gap-2 text-xs text-slate-600">
+            <span className="text-slate-400">📞</span>
+            <a href={`tel:${unit.phone.replace(/\D/g,"")}`}
+               className="hover:text-blue-600 transition-colors font-medium">
+              {unit.phone}
+            </a>
+          </div>
+        )}
+
+        {/* Email button */}
+        {unit.email && (
+          <div className="flex items-center gap-2 text-xs text-slate-600">
+            <span className="text-slate-400">✉</span>
+            <button
+              onClick={() => onEmail(unit)}
+              className="hover:text-indigo-600 transition-colors font-medium text-left"
+            >
+              {unit.email}
+            </button>
+          </div>
+        )}
+
+        {/* Prominent website link */}
         {domain && (
           <a
-            href={listing.url}
+            href={unit.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-auto text-xs text-slate-300 hover:text-indigo-400 transition-colors truncate max-w-[100px]"
+            className="flex items-center justify-center gap-2 w-full mt-1 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-sm hover:shadow"
           >
-            {domain} →
+            <span>🔗</span>
+            <span>View on {domain}</span>
           </a>
         )}
       </div>
@@ -455,12 +470,12 @@ function SearchingState() {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function HUDdl() {
-  const [allListings, setAllListings] = useState<Listing[]>([]);
+  const [allListings, setAllListings] = useState<Unit[]>([]);
   const [loading, setLoading]         = useState(false);
   const [crawled, setCrawled]         = useState(false);
   const [query, setQuery]             = useState("");
   const [tab, setTab]                 = useState<TabKey>("all");
-  const [emailTarget, setEmailTarget] = useState<Listing | null>(null);
+  const [emailTarget, setEmailTarget] = useState<Unit | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query);
@@ -473,11 +488,11 @@ export default function HUDdl() {
         `${API_BASE}/api/listings?q=${encodeURIComponent(q)}&source=${source}`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: Listing[] = await res.json();
+      const data: Unit[] = await res.json();
       setAllListings(data);
       setCrawled(true);
     } catch {
-      setError("Could not reach HUDdl.py — make sure it's running on port 8787.");
+      setError("Could not reach the server. Please try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -661,8 +676,8 @@ export default function HUDdl() {
             </p>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {allListings.map((l, i) => (
-                <ListingCard key={`${l.source}-${l.url || l.title}-${i}`} listing={l} onEmail={setEmailTarget} />
+              {allListings.map((u, i) => (
+                <UnitCard key={`${u.source}-${u.url || u.property_name}-${i}`} unit={u} onEmail={setEmailTarget} />
               ))}
             </div>
           )
@@ -671,7 +686,7 @@ export default function HUDdl() {
 
       {/* Email modal */}
       {emailTarget && (
-        <EmailModal listing={emailTarget} onClose={() => setEmailTarget(null)} />
+        <EmailModal unit={emailTarget} onClose={() => setEmailTarget(null)} />
       )}
     </div>
   );
