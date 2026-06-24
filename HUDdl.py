@@ -7,7 +7,93 @@ address, phone, and email from each page.
 Falls back to a single property-level card when unit data isn't parseable.
 """
 
-import asyncio, csv, io, json, os, re, smtplib, urllib.parse
+import asyncio, csv, io, json, os, re, smtplib, sys, urllib.parse
+
+# ── Semantic search (inline — no separate file needed on Render) ──────────────
+SYNONYMS: dict[str, list[str]] = {
+    "studio":["studio","eff","efficiency","bachelor","0br","0 br","0bed","0 bed","open plan","single room"],
+    "1 bedroom":["1 bed","1bed","1br","1 br","one bed","one bedroom","1b","one-bedroom","1-bed","1-br","1 b/r","single bedroom"],
+    "2 bedroom":["2 bed","2bed","2br","2 br","two bed","two bedroom","2b","two-bedroom","2-bed","2-br","2 b/r","double bedroom"],
+    "3 bedroom":["3 bed","3bed","3br","3 br","three bed","three bedroom","3b","three-bedroom","3-bed","3-br","3 b/r"],
+    "4 bedroom":["4 bed","4bed","4br","4 br","four bed","four bedroom","4b"],
+    "5 bedroom":["5 bed","5bed","5br","5 br","five bed","five bedroom","5b"],
+    "1 bathroom":["1 bath","1bath","1ba","1 ba","one bath","one bathroom","1 full bath","1.0 bath"],
+    "2 bathroom":["2 bath","2bath","2ba","2 ba","two bath","two bathroom","2 full bath","2.0 bath"],
+    "half bath":["half bath","half-bath","0.5 bath","powder room","lavatory"],
+    "apartment":["apartment","apt","flat","unit","suite","rental"],
+    "townhouse":["townhouse","townhome","town home","town house","th","rowhouse","row house","attached home"],
+    "condo":["condo","condominium","co-op","coop","cooperative"],
+    "house":["house","home","single family","sfr","single-family","detached","residence","bungalow","cottage"],
+    "duplex":["duplex","duplex unit","2-unit","two-unit","half duplex"],
+    "loft":["loft","industrial loft","open loft","warehouse loft"],
+    "room":["room","room for rent","boarding","shared","housemate","roommate","rooms","furnished room"],
+    "affordable":["affordable","low income","low-income","income restricted","income-restricted","income based","income-based","subsidized","below market","below-market","bmi","reduced rent","ami","area median income"],
+    "section 8":["section 8","section8","s8","hcv","housing choice voucher","voucher","housing voucher","hap","housing assistance"],
+    "public housing":["public housing","ph","pha","housing authority","government housing","hud housing"],
+    "lihtc":["lihtc","tax credit","low income housing tax credit","tax credit property","affordable tax credit","htc"],
+    "hud":["hud","department of housing","housing and urban development","federal housing","hud assisted","hud property"],
+    "usda":["usda","rural housing","rural development","rd housing","rural rental"],
+    "senior housing":["senior","seniors","elderly","55+","62+","age restricted","age-restricted","retirement","independent living","senior living","senior community"],
+    "disabled":["disabled","disability","ada","accessible","handicap","handicapped","wheelchair","mobility impaired","section 811","811"],
+    "veteran":["veteran","veterans","vash","va housing","military housing","vet","vets","hud-vash","hudvash"],
+    "homeless":["homeless","transitional","transitional housing","shelter","emergency housing","coc","continuum of care","rapid rehousing","supportive housing"],
+    "family":["family","families","family housing","family friendly","children","kids","child","with kids"],
+    "parking":["parking","garage","carport","car port","covered parking","assigned parking","off-street","parking space"],
+    "laundry":["laundry","washer","dryer","w/d","w/d hookup","laundry room","in-unit laundry","coin laundry"],
+    "pet friendly":["pet","pets","pet friendly","pet-friendly","dogs allowed","cats allowed","dog friendly","cat friendly","pets ok","pets welcome"],
+    "ac":["ac","a/c","air conditioning","air conditioner","central air","central a/c","cooling","air-conditioned"],
+    "pool":["pool","swimming pool","community pool","lap pool"],
+    "gym":["gym","fitness","fitness center","workout room","exercise room","fitness room","weight room"],
+    "furnished":["furnished","fully furnished","turnkey","turn key","furniture included"],
+    "available":["available","available now","immediate","immediately","move in ready","move-in ready","vacant","open","ready now","for rent","for lease","leasing now","now leasing"],
+    "waiting list":["waiting list","waitlist","wait list","no vacancy","coming soon","not available","call for availability"],
+    "oakland":["oakland","oak","east oakland","west oakland","north oakland","temescal","fruitvale","montclair","rockridge","grand lake","lake merritt","downtown oakland"],
+    "berkeley":["berkeley","berk","north berkeley","south berkeley","west berkeley","downtown berkeley","uc berkeley","cal"],
+    "fremont":["fremont","frem","mission san jose","warm springs","irvington","centerville","niles","ardenwood"],
+    "hayward":["hayward","hay","south hayward","mt eden","fairview"],
+    "san leandro":["san leandro","sl","san leandro hills"],
+    "alameda":["alameda","the island","bay farm"],
+    "livermore":["livermore","liv","livermore valley","tri-valley"],
+    "pleasanton":["pleasanton","stoneridge"],
+    "dublin":["dublin","dub","emerald glen","fallon"],
+    "union city":["union city","uc","decoto"],
+    "newark":["newark"],
+    "emeryville":["emeryville","emery"],
+    "castro valley":["castro valley","cv"],
+    "short term":["short term","short-term","month to month","month-to-month","mtm","m2m","flexible lease","no lease","temporary"],
+    "long term":["long term","long-term","annual","year lease","12 month","12-month","yearly"],
+    "new construction":["new construction","new build","newly built","brand new","new development","new apartments","just built"],
+    "application":["application","apply","apply now","rental application","leasing office","apply online"],
+    "no credit check":["no credit check","no credit","credit flexible","bad credit ok","second chance"],
+    "utilities included":["utilities included","all bills paid","all utilities","util incl","water included","heat included"],
+    "large":["large","spacious","roomy","big","oversized","xl","extra large"],
+    "small":["small","cozy","compact","tiny","micro","intimate"],
+}
+
+_ALIAS_MAP: dict[str, str] = {}
+for _can, _aliases in SYNONYMS.items():
+    for _a in _aliases:
+        _ALIAS_MAP[_a.lower()] = _can
+    _ALIAS_MAP[_can.lower()] = _can
+
+def _expand(query: str) -> list[str]:
+    import re as _re
+    q = query.lower().strip()
+    terms: set[str] = {q}
+    if q in _ALIAS_MAP:
+        terms.update(a.lower() for a in SYNONYMS[_ALIAS_MAP[q]])
+    tokens = _re.split(r"[\s,/]+", q)
+    for tok in tokens:
+        tok = tok.strip()
+        if not tok: continue
+        terms.add(tok)
+        if tok in _ALIAS_MAP:
+            terms.update(a.lower() for a in SYNONYMS[_ALIAS_MAP[tok]])
+    for i in range(len(tokens)-1):
+        bigram = f"{tokens[i]} {tokens[i+1]}"
+        if bigram in _ALIAS_MAP:
+            terms.update(a.lower() for a in SYNONYMS[_ALIAS_MAP[bigram]])
+    return list(terms)
 from dataclasses import asdict, dataclass, field
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -48,8 +134,7 @@ WEB_URLS: list[str] = [
     "https://www.oaklandpropertymanagement.co/tenants/",
     "https://www.livermoregardensapts.com/apartments/ca/livermore/floor-plans",
     "https://www.electriclofts.com/floorplans",
-    "https://www.apartments.com/alameda-county-ca/"
-    "https://housingbayarea.mtc.ca.gov/listings",
+    "https://www.apartments.com/alameda-county-ca/",
 ]
 
 BROWSER_HEADERS = {
@@ -444,16 +529,21 @@ def send_email(smtp_host, smtp_port, smtp_user, smtp_password,
 
 # ── Search / export ───────────────────────────────────────────────────────────
 def _matches(u: dict, q: str) -> bool:
+    """Semantic search — expands query through real estate synonym dictionary."""
     if not q:
         return True
     hay = " ".join([
         u.get("property_name",""), u.get("unit_label",""),
-        u.get("address",""), u.get("city",""),
+        u.get("address",""), u.get("city",""), u.get("zip_code",""),
         u.get("description",""), u.get("price",""),
         u.get("hud_layer",""), u.get("hud_program",""),
-        u.get("bedrooms",""), u.get("availability",""),
+        u.get("bedrooms",""), u.get("bathrooms",""),
+        u.get("sqft",""), u.get("availability",""),
     ]).lower()
-    return q.lower() in hay
+    for term in _expand(q):
+        if term and term in hay:
+            return True
+    return False
 
 
 def _source_ok(u: dict, source: str) -> bool:
