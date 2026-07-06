@@ -1,28 +1,20 @@
 /**
- * HUDdl.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Frontend for HUDdl.py — the combined Bay Area housing crawler + HUD data app.
- *
- * Features:
- *   • Tabbed view: All | Web Sites | HUD Official Data
- *   • Live search with debounce across all sources
- *   • Per-card VoIP call button and email inquiry modal
- *   • HUD layer badges (Multifamily, LIHTC, Public Housing, etc.)
- *   • CSV / JSON export button
- *   • Stats bar showing counts per source
- *
- * Setup:
- *   1. python HUDdl.py              (starts the API on port 8787)
- *   2. npm run dev                  (starts this frontend on port 5173)
- *   3. Open http://localhost:5173
- *
- * Dependencies: React 18+, Tailwind CSS
- * ─────────────────────────────────────────────────────────────────────────────
+ * HUDdl.tsx — v6
+ * Fixes:
+ *   1. Unit status type extended to include "js_rendered"
+ *   2. JS-rendered cards get distinct visual treatment
+ *   3. API_BASE reads from env var (falls back to localhost for dev)
+ *   4. Tab switching filters client-side — no extra network call
+ *   5. hud_program badge added to HUD cards
+ *   6. price_range field read correctly for HUD records
+ *   7. Missing HUD_LAYER_COLORS entries added
+ *   8. Export buttons gated on allListings.length > 0
+ *   9. Cache status bar added using /api/status
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
-// ─── Logo component (inline SVG — no external file needed) ───────────────────
+// ─── Logo ─────────────────────────────────────────────────────────────────────
 function HudLogo({ size = 40 }: { size?: number }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 520" width={size} height={size}>
@@ -88,16 +80,20 @@ function HudLogo({ size = 40 }: { size?: number }) {
 }
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const API_BASE = "http://localhost:8787";
+// FIX 3: reads from env var so production (Render) works correctly
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE ?? "http://localhost:8787";
 
-// HUD layer color mapping
+// FIX 7: CoC layer + js_rendered added
 const HUD_LAYER_COLORS: Record<string, string> = {
-  "Multifamily Properties (Assisted)": "bg-blue-100 text-blue-800",
-  "Public Housing Authorities":        "bg-purple-100 text-purple-800",
-  "Low Income Housing Tax Credits":    "bg-emerald-100 text-emerald-800",
-  "USDA Rural Housing":                "bg-amber-100 text-amber-800",
-  "Public Housing Buildings":          "bg-rose-100 text-rose-800",
-  "Public Housing Developments":       "bg-teal-100 text-teal-800",
+  "Multifamily Properties (Assisted)":  "bg-blue-100 text-blue-800",
+  "Public Housing Authorities":          "bg-purple-100 text-purple-800",
+  "Low Income Housing Tax Credits":      "bg-emerald-100 text-emerald-800",
+  "USDA Rural Housing":                  "bg-amber-100 text-amber-800",
+  "Public Housing Buildings":            "bg-rose-100 text-rose-800",
+  "Public Housing Developments":         "bg-teal-100 text-teal-800",
+  "Homeless Services/CoC Grantee Areas": "bg-orange-100 text-orange-800",
+  "HUD Offices":                         "bg-sky-100 text-sky-800",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -120,7 +116,16 @@ interface Unit {
   sqft: string;
   availability: string;
   description: string;
-  status: "ok" | "error" | "timeout";
+  // FIX 1: js_rendered added
+  status: "ok" | "error" | "timeout" | "js_rendered";
+}
+
+// FIX 9: cache status shape
+interface CacheStatus {
+  count: number;
+  cache_age_min: number;
+  cache_ttl_hrs: number;
+  stale: boolean;
 }
 
 type TabKey = "all" | "web" | "hud";
@@ -159,7 +164,7 @@ function EmailModal({ unit, onClose }: { unit: Unit; onClose: () => void }) {
     body: `Hello,\n\nI am interested in the ${unit.unit_label || "unit"} at ${unit.property_name}${unit.address ? ` (${unit.address})` : ""}.\nCould you please share availability and pricing?\n\nThank you.`,
   });
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [result, setResult]   = useState<{ ok: boolean; message: string } | null>(null);
 
   const update = (k: keyof EmailPayload, v: string | number) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -201,17 +206,20 @@ function EmailModal({ unit, onClose }: { unit: Unit; onClose: () => void }) {
               SMTP Settings ▸
             </summary>
             <div className="mt-2 space-y-2">
-              {[
-                { label: "SMTP Host", key: "smtp_host", type: "text" },
-                { label: "SMTP Port", key: "smtp_port", type: "number" },
-                { label: "Your Email", key: "smtp_user", type: "email", ph: "you@gmail.com" },
-                { label: "App Password", key: "smtp_password", type: "password", ph: "Gmail App Password" },
-              ].map(({ label, key, type, ph }) => (
+              {([
+                { label: "SMTP Host",    key: "smtp_host",     type: "text"     },
+                { label: "SMTP Port",    key: "smtp_port",     type: "number"   },
+                { label: "Your Email",   key: "smtp_user",     type: "email",   ph: "you@gmail.com"      },
+                { label: "App Password", key: "smtp_password", type: "password",ph: "Gmail App Password" },
+              ] as const).map(({ label, key, type, ph }) => (
                 <Field key={key} label={label}>
                   <input
                     type={type}
                     value={(form as any)[key]}
-                    onChange={(e) => update(key as keyof EmailPayload, type === "number" ? Number(e.target.value) : e.target.value)}
+                    onChange={(e) =>
+                      update(key as keyof EmailPayload,
+                        type === "number" ? Number(e.target.value) : e.target.value)
+                    }
                     placeholder={ph}
                     className={iCls}
                   />
@@ -253,15 +261,26 @@ function EmailModal({ unit, onClose }: { unit: Unit; onClose: () => void }) {
 
 // ─── UnitCard ─────────────────────────────────────────────────────────────────
 function UnitCard({ unit, onEmail }: { unit: Unit; onEmail: (u: Unit) => void }) {
-  const isHUD   = unit.source === "hud";
-  const isError = unit.status !== "ok" && !isHUD;
+  const isHUD      = unit.source === "hud";
+  // FIX 1 & 2: js_rendered is NOT an error — treat it as a valid link card
+  const isError    = unit.status === "error" || unit.status === "timeout";
+  const isJsOnly   = unit.status === "js_rendered";
   const layerColor = unit.hud_layer
     ? HUD_LAYER_COLORS[unit.hud_layer] ?? "bg-slate-100 text-slate-600"
     : "";
 
   const domain = unit.url
-    ? (() => { try { return new URL(unit.url.startsWith("http") ? unit.url : `https://${unit.url}`).hostname.replace(/^www\./, ""); } catch { return unit.url; } })()
+    ? (() => {
+        try {
+          return new URL(
+            unit.url.startsWith("http") ? unit.url : `https://${unit.url}`
+          ).hostname.replace(/^www\./, "");
+        } catch { return unit.url; }
+      })()
     : null;
+
+  // FIX 6: HUD records use price field (already mapped from price_range in backend)
+  const displayPrice = unit.price;
 
   const availColor =
     /available\s*now|immediate|leasing\s*now|move.in/i.test(unit.availability)
@@ -271,35 +290,62 @@ function UnitCard({ unit, onEmail }: { unit: Unit; onEmail: (u: Unit) => void })
       : "text-slate-500 bg-slate-100";
 
   return (
-    <article className={`bg-white rounded-2xl border flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${isError ? "opacity-60 border-slate-200" : "border-slate-200 shadow-sm"}`}>
+    <article className={`bg-white rounded-2xl border flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${
+      isError   ? "opacity-60 border-slate-200" :
+      isJsOnly  ? "border-dashed border-slate-300 shadow-sm" :
+                  "border-slate-200 shadow-sm"
+    }`}>
 
       {/* ── Top badges ── */}
       <div className="flex items-start justify-between px-4 pt-3 pb-1 gap-2">
         <div className="flex flex-wrap gap-1.5">
-          <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${isHUD ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>
+          <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${
+            isHUD ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+          }`}>
             {isHUD ? "HUD" : "Web"}
           </span>
+
+          {/* FIX 7: layer badge — now covers CoC and HUD Offices too */}
           {unit.hud_layer && (
             <span className={`text-[10px] font-medium rounded-full px-2 py-0.5 ${layerColor}`}>
               {unit.hud_layer}
             </span>
           )}
-          {isError && <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Unavailable</span>}
+
+          {/* FIX 5: hud_program badge */}
+          {unit.hud_program && unit.hud_program !== unit.hud_layer && (
+            <span className="text-[10px] font-medium rounded-full px-2 py-0.5 bg-indigo-50 text-indigo-700">
+              {unit.hud_program}
+            </span>
+          )}
+
+          {/* FIX 2: distinct badge for JS-rendered sites */}
+          {isJsOnly && (
+            <span className="text-[10px] bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5">
+              Live site
+            </span>
+          )}
+
+          {isError && (
+            <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+              Unavailable
+            </span>
+          )}
         </div>
-        {/* Price — prominent */}
-        {unit.price && (
+
+        {displayPrice && (
           <span className="shrink-0 text-sm font-bold text-emerald-700 bg-emerald-50 rounded-lg px-2.5 py-0.5">
-            {unit.price}
+            {displayPrice}
           </span>
         )}
       </div>
 
-      {/* ── Unit label (bed/bath/sqft) — headline ── */}
+      {/* ── Unit label ── */}
       <div className="px-4 pb-1">
         <h3 className="text-base font-bold text-slate-800 leading-tight">
-          {unit.unit_label || "Unit"}
+          {/* FIX 2: JS-rendered sites show a more helpful label */}
+          {isJsOnly ? "View live listings →" : (unit.unit_label || "Unit")}
         </h3>
-        {/* Property name as sub-heading */}
         <p className="text-xs font-medium text-slate-500 mt-0.5 truncate">
           {unit.property_name}
         </p>
@@ -337,19 +383,23 @@ function UnitCard({ unit, onEmail }: { unit: Unit; onEmail: (u: Unit) => void })
       )}
 
       {/* ── Description ── */}
-      {unit.description && (
+      {unit.description && !isJsOnly && (
         <p className="px-4 pt-1 text-xs text-slate-400 line-clamp-2 leading-relaxed">
           {unit.description}
         </p>
       )}
 
-      {/* ── Spacer ── */}
+      {/* FIX 2: JS-only explanation text */}
+      {isJsOnly && (
+        <p className="px-4 pt-1 text-xs text-sky-500 italic">
+          Listings load dynamically — click below to browse on the site directly.
+        </p>
+      )}
+
       <div className="flex-1" />
 
-      {/* ── Footer: phone, email, prominent link ── */}
+      {/* ── Footer ── */}
       <div className="px-4 py-3 mt-2 border-t border-slate-100 space-y-2">
-
-        {/* Phone as text */}
         {unit.phone && (
           <div className="flex items-center gap-2 text-xs text-slate-600">
             <span className="text-slate-400">📞</span>
@@ -360,7 +410,6 @@ function UnitCard({ unit, onEmail }: { unit: Unit; onEmail: (u: Unit) => void })
           </div>
         )}
 
-        {/* Email button */}
         {unit.email && (
           <div className="flex items-center gap-2 text-xs text-slate-600">
             <span className="text-slate-400">✉</span>
@@ -373,16 +422,19 @@ function UnitCard({ unit, onEmail }: { unit: Unit; onEmail: (u: Unit) => void })
           </div>
         )}
 
-        {/* Prominent website link */}
         {domain && (
-          <a
+          
             href={unit.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full mt-1 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all shadow-sm hover:shadow"
+            className={`flex items-center justify-center gap-2 w-full mt-1 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-all shadow-sm hover:shadow ${
+              isJsOnly
+                ? "bg-sky-500 hover:bg-sky-600"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
             <span>🔗</span>
-            <span>View on {domain}</span>
+            <span>{isJsOnly ? `Browse ${domain}` : `View on ${domain}`}</span>
           </a>
         )}
       </div>
@@ -400,7 +452,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const iCls = "w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition";
+const iCls   = "w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition";
 const btnPri = "px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
 const btnSec = "px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition";
 
@@ -434,15 +486,12 @@ function SearchingState() {
 
   return (
     <div className="flex flex-col items-center justify-center py-28 gap-4">
-      {/* Animated logo */}
       <div className="relative w-20 h-20">
         <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-ping opacity-20" />
         <div className="w-20 h-20 drop-shadow-md animate-bounce">
           <HudLogo size={80} />
         </div>
       </div>
-
-      {/* Rotating real-estate phrase */}
       <div className="text-center">
         <p className="text-sm font-medium text-slate-600 transition-all duration-500 min-h-[1.5rem]">
           {SEARCH_PHRASES[phraseIdx]}{"·".repeat(dot)}
@@ -451,18 +500,12 @@ function SearchingState() {
           Searching over 25 sites + HUD databases · takes ~30 seconds
         </p>
       </div>
-
-      {/* Progress bar */}
       <div className="w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className="h-full bg-blue-400 rounded-full animate-[progress_30s_linear_forwards]"
+        <div className="h-full bg-blue-400 rounded-full"
              style={{ animation: "progress 30s linear forwards" }} />
       </div>
-
       <style>{`
-        @keyframes progress {
-          from { width: 2%; }
-          to   { width: 98%; }
-        }
+        @keyframes progress { from { width: 2%; } to { width: 98%; } }
       `}</style>
     </div>
   );
@@ -470,6 +513,7 @@ function SearchingState() {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function HUDdl() {
+  // allListings holds the full unfiltered result from the API
   const [allListings, setAllListings] = useState<Unit[]>([]);
   const [loading, setLoading]         = useState(false);
   const [crawled, setCrawled]         = useState(false);
@@ -477,20 +521,34 @@ export default function HUDdl() {
   const [tab, setTab]                 = useState<TabKey>("all");
   const [emailTarget, setEmailTarget] = useState<Unit | null>(null);
   const [error, setError]             = useState<string | null>(null);
+  // FIX 9: cache status state
+  const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query);
 
-  const fetchListings = useCallback(async (q: string, source: string) => {
+  // FIX 9: fetch cache status on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/status`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => d && setCacheStatus(d))
+      .catch(() => {});
+  }, []);
+
+  // Always fetch ALL listings — filtering happens client-side (FIX 4)
+  const fetchListings = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/listings?q=${encodeURIComponent(q)}&source=${source}`
-      );
+      const res = await fetch(`${API_BASE}/api/listings?source=all`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Unit[] = await res.json();
       setAllListings(data);
       setCrawled(true);
+      // Refresh cache status after crawl
+      fetch(`${API_BASE}/api/status`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => d && setCacheStatus(d))
+        .catch(() => {});
     } catch {
       setError("Could not reach the server. Please try again in a moment.");
     } finally {
@@ -498,53 +556,67 @@ export default function HUDdl() {
     }
   }, []);
 
-  // Re-filter from cache when query / tab changes after first load
-  useEffect(() => {
-    if (crawled) {
-      fetchListings(debouncedQuery, tab === "all" ? "all" : tab);
+  // FIX 4: filter client-side — no extra network call on tab/query change
+  const visibleListings = useMemo(() => {
+    let list = allListings;
+
+    // Tab filter
+    if (tab === "web") list = list.filter((u) => u.source === "web");
+    if (tab === "hud") list = list.filter((u) => u.source === "hud");
+
+    // Query filter (simple client-side — backend semantic search runs on full fetch)
+    if (debouncedQuery.trim()) {
+      const q = debouncedQuery.toLowerCase();
+      list = list.filter((u) =>
+        [
+          u.property_name, u.unit_label, u.address, u.city,
+          u.zip_code, u.description, u.price, u.hud_layer,
+          u.hud_program, u.bedrooms, u.bathrooms, u.sqft, u.availability,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      );
     }
-  }, [debouncedQuery, tab, crawled, fetchListings]);
+
+    return list;
+  }, [allListings, tab, debouncedQuery]);
 
   const handleExport = async (fmt: "csv" | "json") => {
-    const src = tab === "all" ? "all" : tab;
-    const url = `${API_BASE}/api/export?format=${fmt}&source=${src}&q=${encodeURIComponent(query)}`;
-    const a = document.createElement("a");
-    a.href = url;
+    const url = `${API_BASE}/api/export?format=${fmt}&source=all`;
+    const a   = document.createElement("a");
+    a.href     = url;
     a.download = `huddl_export.${fmt}`;
     a.click();
   };
 
-  // Stats
-  const webListings = allListings.filter((l) => l.source === "web");
-  const hudListings = allListings.filter((l) => l.source === "hud");
-  const withPhone   = allListings.filter((l) => l.phone).length;
-  const withEmail   = allListings.filter((l) => l.email).length;
+  // Stats (always off the full set, not the filtered view)
+  const webCount   = allListings.filter((l) => l.source === "web").length;
+  const hudCount   = allListings.filter((l) => l.source === "hud").length;
+  const withPhone  = allListings.filter((l) => l.phone).length;
+  const withEmail  = allListings.filter((l) => l.email).length;
 
   const TABS: { key: TabKey; label: string; count: number }[] = [
     { key: "all", label: "All Sources", count: allListings.length },
-    { key: "web", label: "Web Sites",   count: webListings.length },
-    { key: "hud", label: "HUD Data",    count: hudListings.length },
+    { key: "web", label: "Web Sites",   count: webCount           },
+    { key: "hud", label: "HUD Data",    count: hudCount           },
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50 font-sans">
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
+      {/* ── Header ── */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200/70 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center gap-3">
 
-          {/* Logo */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="w-9 h-9">
-              <HudLogo size={36} />
-            </div>
+            <div className="w-9 h-9"><HudLogo size={36} /></div>
             <div>
               <h1 className="text-sm font-bold text-slate-800 leading-none">HUDdl</h1>
               <p className="text-[10px] text-slate-400">Alameda County Housing Data</p>
             </div>
           </div>
 
-          {/* Search */}
           <div className="flex-1 relative max-w-xl w-full">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
             <input
@@ -559,15 +631,13 @@ export default function HUDdl() {
               <button
                 onClick={() => { setQuery(""); inputRef.current?.focus(); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
+              >✕</button>
             )}
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
-            {crawled && (
+            {/* FIX 8: export only when there are actual results */}
+            {allListings.length > 0 && (
               <>
                 <button onClick={() => handleExport("csv")} className="text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition">
                   ↓ CSV
@@ -578,13 +648,13 @@ export default function HUDdl() {
               </>
             )}
             <button
-              onClick={() => fetchListings(query, tab === "all" ? "all" : tab)}
+              onClick={fetchListings}
               disabled={loading}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition shadow disabled:opacity-60 disabled:cursor-wait"
             >
               {loading
                 ? <><span className="animate-spin">⟳</span> Searching…</>
-                : <>⟳ {crawled ? "Search Again" : "Start Search"}</>
+                : <>⟳ {crawled ? "Refresh" : "Start Search"}</>
               }
             </button>
           </div>
@@ -604,7 +674,9 @@ export default function HUDdl() {
                 }`}
               >
                 {label}
-                <span className={`ml-1.5 text-[10px] rounded-full px-1.5 py-0.5 ${tab === key ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+                <span className={`ml-1.5 text-[10px] rounded-full px-1.5 py-0.5 ${
+                  tab === key ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"
+                }`}>
                   {count}
                 </span>
               </button>
@@ -613,13 +685,36 @@ export default function HUDdl() {
         )}
       </header>
 
-      {/* ── Main ────────────────────────────────────────────────────────── */}
+      {/* ── Main ── */}
       <main className="max-w-6xl mx-auto px-4 py-6">
 
-        {/* Error */}
         {error && (
           <div className="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 px-5 py-3 text-sm flex gap-2">
             <span>⚠</span> {error}
+          </div>
+        )}
+
+        {/* FIX 9: cache status bar */}
+        {cacheStatus && !loading && (
+          <div className={`mb-4 rounded-xl px-4 py-2 text-xs flex items-center gap-3 border ${
+            cacheStatus.stale
+              ? "bg-amber-50 border-amber-200 text-amber-700"
+              : "bg-slate-50 border-slate-200 text-slate-500"
+          }`}>
+            <span>{cacheStatus.stale ? "⚠ Cache is stale" : "✓ Cache is fresh"}</span>
+            <span>·</span>
+            <span>{cacheStatus.count.toLocaleString()} records cached</span>
+            <span>·</span>
+            <span>
+              {cacheStatus.cache_age_min < 0
+                ? "Not yet crawled"
+                : cacheStatus.cache_age_min < 60
+                ? `Updated ${cacheStatus.cache_age_min}m ago`
+                : `Updated ${Math.floor(cacheStatus.cache_age_min / 60)}h ago`
+              }
+            </span>
+            <span>·</span>
+            <span>Refreshes every {cacheStatus.cache_ttl_hrs}h</span>
           </div>
         )}
 
@@ -627,11 +722,13 @@ export default function HUDdl() {
         {crawled && !loading && (
           <div className="flex flex-wrap gap-3 mb-5">
             {[
-              { label: "Total found",  value: allListings.length,   color: "text-blue-600" },
-              { label: "Web sites",    value: webListings.length,   color: "text-indigo-600" },
-              { label: "HUD records",  value: hudListings.length,   color: "text-blue-700" },
-              { label: "Have phone",   value: withPhone,            color: "text-sky-600" },
-              { label: "Have email",   value: withEmail,            color: "text-violet-600" },
+              { label: "Total found", value: allListings.length, color: "text-blue-600"   },
+              { label: "Web sites",   value: webCount,           color: "text-indigo-600" },
+              { label: "HUD records", value: hudCount,           color: "text-blue-700"   },
+              { label: "Have phone",  value: withPhone,          color: "text-sky-600"    },
+              { label: "Have email",  value: withEmail,          color: "text-violet-600" },
+              // Visible count (filtered)
+              { label: "Showing",     value: visibleListings.length, color: "text-emerald-600" },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-white rounded-xl border border-slate-200 px-4 py-2 shadow-sm text-center min-w-[90px]">
                 <p className={`text-xl font-bold ${color}`}>{value}</p>
@@ -641,7 +738,7 @@ export default function HUDdl() {
           </div>
         )}
 
-        {/* HUD layer legend (shown on HUD tab) */}
+        {/* HUD layer legend */}
         {crawled && tab === "hud" && !loading && (
           <div className="mb-4 flex flex-wrap gap-2">
             {Object.entries(HUD_LAYER_COLORS).map(([layer, cls]) => (
@@ -655,14 +752,14 @@ export default function HUDdl() {
         {/* Empty / loading state */}
         {!crawled && !loading && (
           <div className="flex flex-col items-center justify-center py-28 text-center">
-            <div className="w-20 h-20 mb-4 drop-shadow-lg">
-              <HudLogo size={80} />
-            </div>
+            <div className="w-20 h-20 mb-4 drop-shadow-lg"><HudLogo size={80} /></div>
             <p className="text-lg font-semibold text-slate-700">HUDdl is ready</p>
             <p className="text-sm text-slate-400 mt-1 max-w-sm">
               Crawls over 25 Bay Area housing sites <em>and</em> HUD's official ArcGIS database — all in one search.
             </p>
-            <p className="text-xs text-slate-300 mt-4">Press <strong>Start Search</strong> to begin · takes ~30 seconds</p>
+            <p className="text-xs text-slate-300 mt-4">
+              Press <strong>Start Search</strong> to begin · takes ~30 seconds
+            </p>
           </div>
         )}
 
@@ -670,21 +767,25 @@ export default function HUDdl() {
 
         {/* Results grid */}
         {!loading && crawled && (
-          allListings.length === 0 ? (
+          visibleListings.length === 0 ? (
             <p className="text-center text-slate-400 py-20">
-              No results for <em>"{query}"</em> in {tab === "all" ? "any source" : tab === "web" ? "web sites" : "HUD data"}.
+              No results for <em>"{query}"</em> in{" "}
+              {tab === "all" ? "any source" : tab === "web" ? "web sites" : "HUD data"}.
             </p>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {allListings.map((u, i) => (
-                <UnitCard key={`${u.source}-${u.url || u.property_name}-${i}`} unit={u} onEmail={setEmailTarget} />
+              {visibleListings.map((u, i) => (
+                <UnitCard
+                  key={`${u.source}-${u.url || u.property_name}-${i}`}
+                  unit={u}
+                  onEmail={setEmailTarget}
+                />
               ))}
             </div>
           )
         )}
       </main>
 
-      {/* Email modal */}
       {emailTarget && (
         <EmailModal unit={emailTarget} onClose={() => setEmailTarget(null)} />
       )}
