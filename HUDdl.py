@@ -134,9 +134,9 @@ WEB_URLS: list[str] = [
     "https://www.oaklandpropertymanagement.co/tenants/",
     "https://www.livermoregardensapts.com/apartments/ca/livermore/floor-plans",
     "https://www.electriclofts.com/floorplans",
-    "https://www.apartments.com/alameda-county-ca/"
-    "https://www.crpmrealty.com/availability"
-    "https://www.mosaicaptsonmission.com/floorplans"
+    "https://www.apartments.com/alameda-county-ca/",
+    "https://www.crpmrealty.com/availability",
+    "https://www.mosaicaptsonmission.com/floorplans",
     "https://www.oaktreepropertygroup.com/oakland",
 ]
 
