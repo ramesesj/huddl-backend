@@ -322,4 +322,459 @@ def _extract_floor_plan_rows(url: str, soup, text: str) -> list[Unit]:
         if not any(k in header for k in ("bed","unit","rent","price","avail","plan")):
             continue
         for row in rows[1:]:
-            cells
+            cells     = [td.get_text(" ", strip=True) for td in row.find_all(["td","th"])]
+            cell_text = " ".join(cells)
+            beds  = BED_RE.search(cell_text)
+            price = PRICE_RE.search(cell_text)
+            baths = BATH_RE.search(cell_text)
+            sqft  = SQFT_RE.search(cell_text)
+            avail = AVAIL_RE.search(cell_text)
+            if not (beds or price):
+                continue
+            u = Unit(**{k: v for k, v in asdict(base).items()})
+            u.bedrooms     = beds.group(1) if beds else ""
+            u.bathrooms    = baths.group(1) if baths else ""
+            u.price        = price.group(0) if price else ""
+            u.sqft         = sqft.group(1).replace(",","") if sqft else ""
+            u.availability = avail.group(0).title() if avail else ""
+            u.unit_label   = _make_label(u)
+            u.description  = cell_text[:200]
+            units.append(u)
+        if units:
+            return units
+
+    # Strategy 2: div/article/li cards
+    card_selectors = [
+        {"class": re.compile(
+            r"(floor.?plan|floorplan|unit.?card|plan.?card|"
+            r"availability|listing.?item|rental.?item|apt.?card|apartment.?item)",
+            re.I,
+        )},
+        {"class": re.compile(r"(plan|unit|listing|rental|room)", re.I)},
+    ]
+    for sel in card_selectors:
+        cards = soup.find_all(["div","article","li","section"], attrs=sel)
+        if len(cards) < 2:
+            continue
+        for card in cards[:40]:
+            ct    = card.get_text(" ", strip=True)
+            beds  = BED_RE.search(ct)
+            price = PRICE_RE.search(ct)
+            if not (beds or price):
+                continue
+            baths = BATH_RE.search(ct)
+            sqft  = SQFT_RE.search(ct)
+            avail = AVAIL_RE.search(ct)
+            link  = card.find("a", href=True)
+            u = Unit(**{k: v for k, v in asdict(base).items()})
+            u.bedrooms     = beds.group(1) if beds else ""
+            u.bathrooms    = baths.group(1) if baths else ""
+            u.price        = price.group(0) if price else ""
+            u.sqft         = sqft.group(1).replace(",","") if sqft else ""
+            u.availability = avail.group(0).title() if avail else ""
+            u.unit_label   = _make_label(u)
+            u.description  = ct[:200]
+            if link:
+                href  = link["href"]
+                u.url = href if href.startswith("http") else urllib.parse.urljoin(url, href)
+            units.append(u)
+        if len(units) >= 2:
+            return _dedup(units)
+
+    # Strategy 3: inline paragraphs / spans
+    for tag in soup.find_all(["p","li","dd","dt","span","div"]):
+        ct = tag.get_text(" ", strip=True)
+        if len(ct) > 400 or len(ct) < 8:
+            continue
+        beds  = BED_RE.search(ct)
+        price = PRICE_RE.search(ct)
+        if not (beds and price):
+            continue
+        baths = BATH_RE.search(ct)
+        sqft  = SQFT_RE.search(ct)
+        avail = AVAIL_RE.search(ct)
+        u = Unit(**{k: v for k, v in asdict(base).items()})
+        u.bedrooms     = beds.group(1)
+        u.bathrooms    = baths.group(1) if baths else ""
+        u.price        = price.group(0)
+        u.sqft         = sqft.group(1).replace(",","") if sqft else ""
+        u.availability = avail.group(0).title() if avail else ""
+        u.unit_label   = _make_label(u)
+        u.description  = ct[:200]
+        units.append(u)
+
+    return _dedup(units) if units else []
+
+
+def _make_label(u: Unit) -> str:
+    parts = []
+    if u.bedrooms:  parts.append(f"{u.bedrooms} Bed")
+    if u.bathrooms: parts.append(f"{u.bathrooms} Bath")
+    if u.sqft:      parts.append(f"{u.sqft} sq ft")
+    return " / ".join(parts) if parts else "Unit"
+
+
+def _dedup(units: list[Unit]) -> list[Unit]:
+    seen = set()
+    out  = []
+    for u in units:
+        key = (u.bedrooms, u.price, u.sqft)
+        if key not in seen:
+            seen.add(key)
+            out.append(u)
+    return out
+
+
+def _fallback_unit(url: str, soup, text: str) -> list[Unit]:
+    base      = _base_unit(url, soup, text)
+    beds_all  = list(dict.fromkeys(BED_RE.findall(text)))
+    price_all = PRICE_RE.findall(text)
+    avail     = AVAIL_RE.search(text)
+    base.bedrooms     = beds_all[0] if beds_all else ""
+    base.price        = price_all[0] if price_all else ""
+    base.availability = avail.group(0).title() if avail else ""
+    base.unit_label   = (
+        "Studio – " + beds_all[-1] + " Bed"
+        if len(beds_all) > 1 else _make_label(base)
+    )
+    meta = soup.find("meta", attrs={"name": re.compile(r"description", re.I)})
+    base.description  = (meta.get("content","") if meta else "")[:300]
+    if not base.description:
+        p = soup.find("p")
+        if p:
+            base.description = p.get_text(" ", strip=True)[:300]
+    return [base]
+
+
+def parse_page(url: str, html: str) -> list[Unit]:
+    # FIX 3: skip deep parse for JS-only sites
+    if _is_js_only(url, html):
+        print(f"  [web] {urllib.parse.urlparse(url).netloc}: JS-rendered, returning link card")
+        return _js_only_card(url, html)
+    soup  = BeautifulSoup(html, "html.parser")
+    text  = soup.get_text(" ")
+    units = _extract_floor_plan_rows(url, soup, text)
+    if not units:
+        units = _fallback_unit(url, soup, text)
+    prop_name = _page_title(soup)
+    for u in units:
+        if not u.property_name:
+            u.property_name = prop_name
+    return units
+
+
+# ── Web crawler ───────────────────────────────────────────────────────────────
+async def crawl_web() -> list[Unit]:
+    pages   = await _fetch_all(WEB_URLS)
+    results: list[Unit] = []
+    for url, html in pages:
+        if html:
+            units = parse_page(url, html)
+            results.extend(units)
+            print(f"  [web] {urllib.parse.urlparse(url).netloc}: {len(units)} unit(s)")
+        else:
+            results.append(Unit(
+                source="web",
+                url=url,
+                property_name=urllib.parse.urlparse(url).netloc,
+                unit_label="Property",
+                status="error",
+            ))
+            print(f"  [web] {urllib.parse.urlparse(url).netloc}: FAILED")
+    return results
+
+
+# ── FIX 5: HUD loader ────────────────────────────────────────────────────────
+def load_hud_data() -> list[dict]:
+    json_path = os.path.join(os.path.dirname(__file__), "hud_data.json")
+    if not os.path.isfile(json_path):
+        print("  [HUD] hud_data.json not found — using static fallback")
+        return _static_fallback()
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+        out = []
+        for r in data:
+            raw_beds     = r.get("bedrooms", [])
+            bedrooms_str = ", ".join(raw_beds) if isinstance(raw_beds, list) else str(raw_beds or "")
+            out.append({
+                "source":        "hud",
+                "hud_layer":     r.get("hud_layer", ""),
+                "hud_program":   r.get("hud_program", ""),
+                "property_name": r.get("title", ""),
+                "unit_label":    r.get("units","") + " units" if r.get("units") else "HUD Property",
+                "url":           r.get("url", ""),
+                "address":       r.get("address", ""),
+                "city":          r.get("city", ""),
+                "state":         r.get("state", "CA"),
+                "zip_code":      r.get("zip_code", ""),
+                "phone":         r.get("phone", ""),
+                "email":         r.get("email", ""),
+                "price":         r.get("price_range", ""),   # FIX 5
+                "bedrooms":      bedrooms_str,               # FIX 5
+                "bathrooms":     "",
+                "sqft":          "",
+                "availability":  "",
+                "description":   r.get("description", ""),
+                "status":        "ok",
+            })
+        print(f"  [HUD] Loaded {len(out)} records from hud_data.json")
+        return out
+    except Exception as e:
+        print(f"  [HUD] Error loading hud_data.json: {e}")
+        return _static_fallback()
+
+
+def _static_fallback() -> list[dict]:
+    return [
+        {
+            "source":"hud","hud_layer":"HUD Offices","hud_program":"HUD Field Office",
+            "property_name":"HUD San Francisco Regional Office",
+            "unit_label":"Field Office",
+            "url":"https://www.hud.gov/contactus/local",
+            "address":"One Embarcadero Center, Suite 1600",
+            "city":"San Francisco","state":"CA","zip_code":"94111",
+            "phone":"415-489-6400","email":"","price":"","bedrooms":"",
+            "bathrooms":"","sqft":"","availability":"",
+            "description":"HUD Field Office serving Alameda County and the Bay Area",
+            "status":"ok",
+        },
+        {
+            "source":"hud","hud_layer":"Public Housing Authorities",
+            "hud_program":"Public Housing Authority",
+            "property_name":"Housing Authority of the County of Alameda (HACA)",
+            "unit_label":"Public Housing Authority",
+            "url":"https://www.haca.net","address":"22941 Atherton Street",
+            "city":"Hayward","state":"CA","zip_code":"94541",
+            "phone":"510-538-8876","email":"","price":"","bedrooms":"",
+            "bathrooms":"","sqft":"","availability":"",
+            "description":"Public Housing Authority serving Alameda County",
+            "status":"ok",
+        },
+        {
+            "source":"hud","hud_layer":"Public Housing Authorities",
+            "hud_program":"Public Housing Authority",
+            "property_name":"Oakland Housing Authority (OHA)",
+            "unit_label":"Public Housing Authority",
+            "url":"https://www.oakha.org","address":"1805 Harrison Street",
+            "city":"Oakland","state":"CA","zip_code":"94612",
+            "phone":"510-874-1500","email":"","price":"","bedrooms":"",
+            "bathrooms":"","sqft":"","availability":"",
+            "description":"Public Housing Authority serving Oakland and Alameda County",
+            "status":"ok",
+        },
+        {
+            "source":"hud","hud_layer":"Homeless Services/CoC Grantee Areas",
+            "hud_program":"Continuum of Care",
+            "property_name":"EveryOne Home — Alameda County CoC (CA-502)",
+            "unit_label":"CoC Grantee",
+            "url":"https://www.everyonehome.org","address":"224 W. Winton Avenue",
+            "city":"Hayward","state":"CA","zip_code":"94544",
+            "phone":"510-670-5944","email":"","price":"","bedrooms":"",
+            "bathrooms":"","sqft":"","availability":"",
+            "description":"Continuum of Care grantee · Alameda County, CA · CoC #CA-502",
+            "status":"ok",
+        },
+    ]
+
+
+# ── FIX 4: TTL-based cache ────────────────────────────────────────────────────
+_cache: list[dict] = []
+_cache_ts: float   = 0.0
+
+
+def _cache_is_stale() -> bool:
+    return (not _cache) or (time.time() - _cache_ts > CACHE_TTL)
+
+
+async def _refresh_cache() -> None:
+    global _cache, _cache_ts
+    print("\nStarting HUDdl crawl…")
+    web_units = await crawl_web()
+    hud_units = load_hud_data()
+    print(f"  Web: {len(web_units)} units | HUD: {len(hud_units)} records")
+    _cache    = [asdict(u) for u in web_units] + hud_units
+    _cache_ts = time.time()
+
+
+async def crawl_all() -> list[dict]:
+    await _refresh_cache()
+    return _cache
+
+
+# ── Search / export ───────────────────────────────────────────────────────────
+def _matches(u: dict, q: str) -> bool:
+    if not q:
+        return True
+    hay = " ".join([
+        u.get("property_name",""), u.get("unit_label",""),
+        u.get("address",""),       u.get("city",""),
+        u.get("zip_code",""),      u.get("description",""),
+        u.get("price",""),         u.get("hud_layer",""),
+        u.get("hud_program",""),   u.get("bedrooms",""),
+        u.get("bathrooms",""),     u.get("sqft",""),
+        u.get("availability",""),
+    ]).lower()
+    return any(term and term in hay for term in _expand(q))
+
+
+def _source_ok(u: dict, source: str) -> bool:
+    return source in ("all","") or u.get("source","") == source
+
+
+def to_csv(units: list[dict]) -> str:
+    if not units:
+        return ""
+    fields = [
+        "source","hud_layer","hud_program","property_name","unit_label",
+        "address","city","state","zip_code","phone","email",
+        "price","bedrooms","bathrooms","sqft","availability",
+        "description","url","status",
+    ]
+    buf = io.StringIO()
+    w   = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
+    w.writeheader()
+    for u in units:
+        w.writerow(u)
+    return buf.getvalue()
+
+
+# ── Contact helpers ───────────────────────────────────────────────────────────
+def send_email(smtp_host, smtp_port, smtp_user, smtp_password,
+               from_addr, to_addr, subject, body):
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = from_addr
+        msg["To"]      = to_addr
+        msg.attach(MIMEText(body, "plain"))
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as srv:
+            srv.ehlo()
+            srv.starttls()
+            srv.login(smtp_user, smtp_password)
+            srv.sendmail(from_addr, to_addr, msg.as_string())
+        return {"ok": True, "message": f"Email sent to {to_addr}"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+# ── HTTP server ───────────────────────────────────────────────────────────────
+class APIHandler(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+
+    def _send(self, data: bytes, ct: str, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", ct)
+        self.send_header("Content-Length", str(len(data)))
+        self._cors()
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _json(self, obj, status=200):
+        self._send(
+            json.dumps(obj, ensure_ascii=False).encode(),
+            "application/json",
+            status,
+        )
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
+
+    def do_GET(self):
+        p  = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(p.query)
+
+        def param(k, d=""):
+            return qs.get(k, [d])[0]
+
+        # FIX 4: auto-refresh if cache is stale
+        if _cache_is_stale():
+            asyncio.run(_refresh_cache())
+
+        if p.path in ("/api/listings", "/api/hud"):
+            q      = param("q").lower()
+            source = param("source","all").lower()
+            layer  = param("layer").lower()
+            data   = [
+                u for u in _cache
+                if _source_ok(u, source)
+                and _matches(u, q)
+                and (not layer or layer in u.get("hud_layer","").lower())
+            ]
+            if p.path == "/api/hud":
+                data = [u for u in data if u.get("source") == "hud"]
+            self._json(data)
+
+        elif p.path == "/api/export":
+            q      = param("q").lower()
+            source = param("source","all").lower()
+            data   = [u for u in _cache if _source_ok(u, source) and _matches(u, q)]
+            if param("format","json") == "csv":
+                b = to_csv(data).encode()
+                self.send_response(200)
+                self.send_header("Content-Type","text/csv")
+                self.send_header("Content-Disposition",
+                                 'attachment; filename="huddl_export.csv"')
+                self.send_header("Content-Length", str(len(b)))
+                self._cors()
+                self.end_headers()
+                self.wfile.write(b)
+            else:
+                self._json(data)
+
+        elif p.path == "/api/refresh":
+            asyncio.run(_refresh_cache())
+            self._json({"ok": True, "count": len(_cache)})
+
+        elif p.path == "/api/status":
+            age_minutes = int((time.time() - _cache_ts) / 60) if _cache_ts else -1
+            self._json({
+                "count":         len(_cache),
+                "cache_age_min": age_minutes,
+                "cache_ttl_hrs": CACHE_TTL // 3600,
+                "stale":         _cache_is_stale(),
+            })
+
+        else:
+            self._json({"error": "Not found"}, 404)
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body   = json.loads(self.rfile.read(length) or "{}")
+        if self.path == "/api/email":
+            result = send_email(
+                smtp_host     = os.environ.get("SMTP_HOST","smtp.gmail.com"),
+                smtp_port     = int(os.environ.get("SMTP_PORT", 587)),
+                smtp_user     = os.environ.get("SMTP_USER",""),
+                smtp_password = os.environ.get("SMTP_PASSWORD",""),
+                from_addr     = os.environ.get("SMTP_USER",""),
+                to_addr       = body.get("to",""),
+                subject       = body.get("subject","Housing Inquiry"),
+                body          = body.get("body",""),
+            )
+            self._json(result)
+        else:
+            self._json({"error": "Not found"}, 404)
+
+
+def run_server(host="0.0.0.0", port=8787):
+    server = HTTPServer((host, port), APIHandler)
+    print(f"\n🏠  HUDdl v6 API  →  http://{host}:{port}")
+    print(f"   Cache TTL: {CACHE_TTL // 3600}h  |  Stagger: {REQUEST_STAGGER_S}s  |  Retries: {MAX_RETRIES}")
+    print("   Press Ctrl+C to stop.\n")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nHUDdl stopped.")
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8787))
+    run_server(port=port)
