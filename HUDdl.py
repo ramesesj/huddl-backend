@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
 """
-HUDdl.py — v6
-Fixes:
-  1. Missing commas in WEB_URLS (silent URL concatenation)
-  2. Concurrent request bursting replaced with staggered fetches + retry
-  3. JavaScript-heavy sites handled via a lightweight JS-hint detection layer
-  4. Cache invalidation added (TTL-based, default 6 hours)
-  5. HUD bedrooms/price fields populated from enriched hud_data.json
+HUDdl.py — v6.1
 """
 
 import asyncio, csv, io, json, os, re, smtplib, sys, time, urllib.parse
 
-# ── Semantic search ───────────────────────────────────────────────────────────
 SYNONYMS: dict[str, list[str]] = {
     "studio":["studio","eff","efficiency","bachelor","0br","0 br","0bed","0 bed","open plan","single room"],
     "1 bedroom":["1 bed","1bed","1br","1 br","one bed","one bedroom","1b","one-bedroom","1-bed","1-br","1 b/r","single bedroom"],
@@ -115,11 +108,10 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-CACHE_TTL        = int(os.environ.get("CACHE_TTL_HOURS", 6)) * 3600
+CACHE_TTL         = int(os.environ.get("CACHE_TTL_HOURS", 6)) * 3600
 REQUEST_STAGGER_S = 0.4
-MAX_RETRIES      = 2
+MAX_RETRIES       = 2
 
-# ── FIX 1: WEB_URLS — commas added between every entry ───────────────────────
 WEB_URLS: list[str] = [
     "https://www.affordablehousing.com/alameda-county-ca/",
     "https://alderwoodapartments.rentals/availability/",
@@ -143,7 +135,6 @@ WEB_URLS: list[str] = [
     "https://www.oaklandpropertymanagement.co/tenants/",
     "https://www.livermoregardensapts.com/apartments/ca/livermore/floor-plans",
     "https://www.electriclofts.com/floorplans",
-    # FIX 1: these three were missing commas and were silently fused into one broken URL
     "https://www.apartments.com/alameda-county-ca/",
     "https://www.crpmrealty.com/availability",
     "https://www.mosaicaptsonmission.com/floorplans",
@@ -181,7 +172,6 @@ AVAIL_RE = re.compile(
     re.IGNORECASE,
 )
 
-
 # ── Data model ────────────────────────────────────────────────────────────────
 @dataclass
 class Unit:
@@ -205,8 +195,7 @@ class Unit:
     description: str = ""
     status: str = "ok"
 
-
-# ── FIX 2: Staggered fetch with retry ────────────────────────────────────────
+# ── Fetch ─────────────────────────────────────────────────────────────────────
 async def _fetch(session: "aiohttp.ClientSession", url: str) -> tuple[str, Optional[str]]:
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -228,7 +217,6 @@ async def _fetch(session: "aiohttp.ClientSession", url: str) -> tuple[str, Optio
             await asyncio.sleep(1.5 * (attempt + 1))
     return url, None
 
-
 async def _fetch_all(urls: list[str]) -> list[tuple[str, Optional[str]]]:
     connector = aiohttp.TCPConnector(ssl=False, limit=5)
     results   = []
@@ -239,14 +227,12 @@ async def _fetch_all(urls: list[str]) -> list[tuple[str, Optional[str]]]:
             await asyncio.sleep(REQUEST_STAGGER_S)
     return results
 
-
-# ── Page-level helpers ────────────────────────────────────────────────────────
+# ── Page helpers ──────────────────────────────────────────────────────────────
 def _page_phone(text: str) -> str:
     m = PHONE_RE.findall(text)
     if m:
         return re.sub(r"[^\d+\-() ]", "", "".join(m[0])).strip()
     return ""
-
 
 def _page_email(text: str) -> str:
     emails = EMAIL_RE.findall(text)
@@ -256,11 +242,9 @@ def _page_email(text: str) -> str:
         "",
     )
 
-
 def _page_title(soup) -> str:
     t = soup.find("title")
     return t.get_text(strip=True)[:100] if t else ""
-
 
 def _page_address(soup) -> str:
     a = (
@@ -270,7 +254,6 @@ def _page_address(soup) -> str:
     )
     return a.get_text(" ", strip=True)[:200] if a else ""
 
-
 def _base_unit(url: str, soup, text: str) -> Unit:
     u = Unit(source="web", url=url)
     u.property_name = _page_title(soup)
@@ -279,8 +262,7 @@ def _base_unit(url: str, soup, text: str) -> Unit:
     u.email         = _page_email(text)
     return u
 
-
-# ── FIX 3: JS-only site handler ───────────────────────────────────────────────
+# ── JS-only detection ─────────────────────────────────────────────────────────
 def _is_js_only(url: str, html: str) -> bool:
     domain = urllib.parse.urlparse(url).netloc
     if domain in JS_ONLY_SITES:
@@ -292,13 +274,12 @@ def _is_js_only(url: str, html: str) -> bool:
         return True
     return False
 
-
 def _js_only_card(url: str, html: str) -> list[Unit]:
     soup = BeautifulSoup(html, "html.parser")
     text = soup.get_text(" ")
     base = _base_unit(url, soup, text)
-    base.unit_label  = "View listings on site →"
-    base.description = (
+    base.unit_label   = "View listings on site →"
+    base.description  = (
         "This site loads listings via JavaScript. "
         "Click the link to view available units directly."
     )
@@ -306,18 +287,16 @@ def _js_only_card(url: str, html: str) -> list[Unit]:
     base.status       = "js_rendered"
     return [base]
 
-
 # ── Unit extractors ───────────────────────────────────────────────────────────
 def _extract_floor_plan_rows(url: str, soup, text: str) -> list[Unit]:
     base  = _base_unit(url, soup, text)
     units: list[Unit] = []
 
-    # Strategy 1: table rows
     for table in soup.find_all("table"):
         rows   = table.find_all("tr")
         header = " ".join(
             th.get_text(" ", strip=True).lower()
-            for th in (rows[0].find_all(["th","td"]) if rows else [])
+            for th in (rows[0].find_all(["th", "td"]) if rows else [])
         )
         if not any(k in header for k in ("bed","unit","rent","price","avail","plan")):
             continue
@@ -343,7 +322,6 @@ def _extract_floor_plan_rows(url: str, soup, text: str) -> list[Unit]:
         if units:
             return units
 
-    # Strategy 2: div/article/li cards
     card_selectors = [
         {"class": re.compile(
             r"(floor.?plan|floorplan|unit.?card|plan.?card|"
@@ -381,7 +359,6 @@ def _extract_floor_plan_rows(url: str, soup, text: str) -> list[Unit]:
         if len(units) >= 2:
             return _dedup(units)
 
-    # Strategy 3: inline paragraphs / spans
     for tag in soup.find_all(["p","li","dd","dt","span","div"]):
         ct = tag.get_text(" ", strip=True)
         if len(ct) > 400 or len(ct) < 8:
@@ -405,14 +382,12 @@ def _extract_floor_plan_rows(url: str, soup, text: str) -> list[Unit]:
 
     return _dedup(units) if units else []
 
-
 def _make_label(u: Unit) -> str:
     parts = []
     if u.bedrooms:  parts.append(f"{u.bedrooms} Bed")
     if u.bathrooms: parts.append(f"{u.bathrooms} Bath")
     if u.sqft:      parts.append(f"{u.sqft} sq ft")
     return " / ".join(parts) if parts else "Unit"
-
 
 def _dedup(units: list[Unit]) -> list[Unit]:
     seen = set()
@@ -423,7 +398,6 @@ def _dedup(units: list[Unit]) -> list[Unit]:
             seen.add(key)
             out.append(u)
     return out
-
 
 def _fallback_unit(url: str, soup, text: str) -> list[Unit]:
     base      = _base_unit(url, soup, text)
@@ -445,9 +419,7 @@ def _fallback_unit(url: str, soup, text: str) -> list[Unit]:
             base.description = p.get_text(" ", strip=True)[:300]
     return [base]
 
-
 def parse_page(url: str, html: str) -> list[Unit]:
-    # FIX 3: skip deep parse for JS-only sites
     if _is_js_only(url, html):
         print(f"  [web] {urllib.parse.urlparse(url).netloc}: JS-rendered, returning link card")
         return _js_only_card(url, html)
@@ -461,7 +433,6 @@ def parse_page(url: str, html: str) -> list[Unit]:
         if not u.property_name:
             u.property_name = prop_name
     return units
-
 
 # ── Web crawler ───────────────────────────────────────────────────────────────
 async def crawl_web() -> list[Unit]:
@@ -483,8 +454,7 @@ async def crawl_web() -> list[Unit]:
             print(f"  [web] {urllib.parse.urlparse(url).netloc}: FAILED")
     return results
 
-
-# ── FIX 5: HUD loader ────────────────────────────────────────────────────────
+# ── HUD loader ────────────────────────────────────────────────────────────────
 def load_hud_data() -> list[dict]:
     json_path = os.path.join(os.path.dirname(__file__), "hud_data.json")
     if not os.path.isfile(json_path):
@@ -502,16 +472,19 @@ def load_hud_data() -> list[dict]:
                 "hud_layer":     r.get("hud_layer", ""),
                 "hud_program":   r.get("hud_program", ""),
                 "property_name": r.get("title", ""),
-                "unit_label":    r.get("units","") + " units" if r.get("units") else "HUD Property",
+                "unit_label":    (
+                    r.get("units","") + " units"
+                    if r.get("units") else "HUD Property"
+                ),
                 "url":           r.get("url", ""),
                 "address":       r.get("address", ""),
                 "city":          r.get("city", ""),
-                "state":         r.get("state", "CA"),
+                "state":         r.get("state", ""),
                 "zip_code":      r.get("zip_code", ""),
                 "phone":         r.get("phone", ""),
                 "email":         r.get("email", ""),
-                "price":         r.get("price_range", ""),   # FIX 5
-                "bedrooms":      bedrooms_str,               # FIX 5
+                "price":         r.get("price_range") or "Income-based",
+                "bedrooms":      bedrooms_str,
                 "bathrooms":     "",
                 "sqft":          "",
                 "availability":  "",
@@ -524,7 +497,6 @@ def load_hud_data() -> list[dict]:
         print(f"  [HUD] Error loading hud_data.json: {e}")
         return _static_fallback()
 
-
 def _static_fallback() -> list[dict]:
     return [
         {
@@ -534,7 +506,7 @@ def _static_fallback() -> list[dict]:
             "url":"https://www.hud.gov/contactus/local",
             "address":"One Embarcadero Center, Suite 1600",
             "city":"San Francisco","state":"CA","zip_code":"94111",
-            "phone":"415-489-6400","email":"","price":"","bedrooms":"",
+            "phone":"415-489-6400","email":"","price":"Income-based","bedrooms":"",
             "bathrooms":"","sqft":"","availability":"",
             "description":"HUD Field Office serving Alameda County and the Bay Area",
             "status":"ok",
@@ -546,7 +518,7 @@ def _static_fallback() -> list[dict]:
             "unit_label":"Public Housing Authority",
             "url":"https://www.haca.net","address":"22941 Atherton Street",
             "city":"Hayward","state":"CA","zip_code":"94541",
-            "phone":"510-538-8876","email":"","price":"","bedrooms":"",
+            "phone":"510-538-8876","email":"","price":"Income-based","bedrooms":"",
             "bathrooms":"","sqft":"","availability":"",
             "description":"Public Housing Authority serving Alameda County",
             "status":"ok",
@@ -558,7 +530,7 @@ def _static_fallback() -> list[dict]:
             "unit_label":"Public Housing Authority",
             "url":"https://www.oakha.org","address":"1805 Harrison Street",
             "city":"Oakland","state":"CA","zip_code":"94612",
-            "phone":"510-874-1500","email":"","price":"","bedrooms":"",
+            "phone":"510-874-1500","email":"","price":"Income-based","bedrooms":"",
             "bathrooms":"","sqft":"","availability":"",
             "description":"Public Housing Authority serving Oakland and Alameda County",
             "status":"ok",
@@ -570,22 +542,19 @@ def _static_fallback() -> list[dict]:
             "unit_label":"CoC Grantee",
             "url":"https://www.everyonehome.org","address":"224 W. Winton Avenue",
             "city":"Hayward","state":"CA","zip_code":"94544",
-            "phone":"510-670-5944","email":"","price":"","bedrooms":"",
+            "phone":"510-670-5944","email":"","price":"Income-based","bedrooms":"",
             "bathrooms":"","sqft":"","availability":"",
             "description":"Continuum of Care grantee · Alameda County, CA · CoC #CA-502",
             "status":"ok",
         },
     ]
 
-
-# ── FIX 4: TTL-based cache ────────────────────────────────────────────────────
+# ── TTL cache ─────────────────────────────────────────────────────────────────
 _cache: list[dict] = []
 _cache_ts: float   = 0.0
 
-
 def _cache_is_stale() -> bool:
     return (not _cache) or (time.time() - _cache_ts > CACHE_TTL)
-
 
 async def _refresh_cache() -> None:
     global _cache, _cache_ts
@@ -596,11 +565,9 @@ async def _refresh_cache() -> None:
     _cache    = [asdict(u) for u in web_units] + hud_units
     _cache_ts = time.time()
 
-
 async def crawl_all() -> list[dict]:
     await _refresh_cache()
     return _cache
-
 
 # ── Search / export ───────────────────────────────────────────────────────────
 def _matches(u: dict, q: str) -> bool:
@@ -617,10 +584,8 @@ def _matches(u: dict, q: str) -> bool:
     ]).lower()
     return any(term and term in hay for term in _expand(q))
 
-
 def _source_ok(u: dict, source: str) -> bool:
     return source in ("all","") or u.get("source","") == source
-
 
 def to_csv(units: list[dict]) -> str:
     if not units:
@@ -638,8 +603,7 @@ def to_csv(units: list[dict]) -> str:
         w.writerow(u)
     return buf.getvalue()
 
-
-# ── Contact helpers ───────────────────────────────────────────────────────────
+# ── Email ─────────────────────────────────────────────────────────────────────
 def send_email(smtp_host, smtp_port, smtp_user, smtp_password,
                from_addr, to_addr, subject, body):
     try:
@@ -649,14 +613,12 @@ def send_email(smtp_host, smtp_port, smtp_user, smtp_password,
         msg["To"]      = to_addr
         msg.attach(MIMEText(body, "plain"))
         with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as srv:
-            srv.ehlo()
-            srv.starttls()
+            srv.ehlo(); srv.starttls()
             srv.login(smtp_user, smtp_password)
             srv.sendmail(from_addr, to_addr, msg.as_string())
         return {"ok": True, "message": f"Email sent to {to_addr}"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
-
 
 # ── HTTP server ───────────────────────────────────────────────────────────────
 class APIHandler(BaseHTTPRequestHandler):
@@ -671,11 +633,7 @@ class APIHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _json(self, obj, status=200):
-        self._send(
-            json.dumps(obj, ensure_ascii=False).encode(),
-            "application/json",
-            status,
-        )
+        self._send(json.dumps(obj, ensure_ascii=False).encode(), "application/json", status)
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -690,11 +648,8 @@ class APIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         p  = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(p.query)
+        def param(k, d=""): return qs.get(k, [d])[0]
 
-        def param(k, d=""):
-            return qs.get(k, [d])[0]
-
-        # FIX 4: auto-refresh if cache is stale
         if _cache_is_stale():
             asyncio.run(_refresh_cache())
 
@@ -720,8 +675,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 b = to_csv(data).encode()
                 self.send_response(200)
                 self.send_header("Content-Type","text/csv")
-                self.send_header("Content-Disposition",
-                                 'attachment; filename="huddl_export.csv"')
+                self.send_header("Content-Disposition",'attachment; filename="huddl_export.csv"')
                 self.send_header("Content-Length", str(len(b)))
                 self._cors()
                 self.end_headers()
@@ -763,17 +717,15 @@ class APIHandler(BaseHTTPRequestHandler):
         else:
             self._json({"error": "Not found"}, 404)
 
-
 def run_server(host="0.0.0.0", port=8787):
     server = HTTPServer((host, port), APIHandler)
-    print(f"\n🏠  HUDdl v6 API  →  http://{host}:{port}")
+    print(f"\n🏠  HUDdl v6.1 API  →  http://{host}:{port}")
     print(f"   Cache TTL: {CACHE_TTL // 3600}h  |  Stagger: {REQUEST_STAGGER_S}s  |  Retries: {MAX_RETRIES}")
     print("   Press Ctrl+C to stop.\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nHUDdl stopped.")
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8787))
