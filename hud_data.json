@@ -1099,7 +1099,7 @@
     "state": "IL",
     "zip_code": "62340",
     "phone": "(217) 774-3290",
-    "email": "glendahyneman@yahoo.com",
+    "email": "awagner@jakksmgmt.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -1583,7 +1583,7 @@
     "state": "IL",
     "zip_code": "62340",
     "phone": "(217) 774-3290",
-    "email": "glendahyneman@yahoo.com",
+    "email": "awagner@jakksmgmt.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -1605,7 +1605,7 @@
     "state": "IL",
     "zip_code": "62324",
     "phone": "",
-    "email": "mbtodd@me.com",
+    "email": "MCurley@JAKKSmgmt.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -2045,7 +2045,7 @@
     "state": "MI",
     "zip_code": "48307",
     "phone": "248-6524394",
-    "email": "jenee@pkmanagement.com",
+    "email": "lbeffa@related.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -2412,7 +2412,7 @@
     "state": "OH",
     "zip_code": "44830",
     "phone": "419-435-4702",
-    "email": "kHurt@wallick.com",
+    "email": "vwhite@wallick.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -2514,22 +2514,23 @@
     "hud_layer": "Multifamily Properties (Assisted)",
     "hud_program": "Section 8 / HUD Assisted",
     "title": "PLAZA APARTMENTS",
-    "address": "7777 Holmes Rd",
-    "city": "Kansas City",
-    "state": "MO",
-    "zip_code": "64131",
-    "phone": "(816) 444-8888",
-    "email": "AGrisham@related.com",
+    "address": "304 Saint Johns Pl",
+    "city": "Brooklyn",
+    "state": "NY",
+    "zip_code": "11238",
+    "phone": "",
+    "email": "jennifer.lau@fairstead.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
       "studio",
       "1br",
-      "2br"
+      "2br",
+      "3br"
     ],
-    "url": "https://www.google.com/search?q=PLAZA%20APARTMENTS%207777%20Holmes%20Rd%20Kansas%20City%20MO",
+    "url": "https://www.google.com/search?q=PLAZA%20APARTMENTS%20304%20Saint%20Johns%20Pl%20Brooklyn%20NY",
     "status": "ok",
-    "description": "202/8 NC · 7777 Holmes Rd · Kansas City, MO 64131"
+    "description": "Sec 8 SR · 304 Saint Johns Pl · Brooklyn, NY 11238"
   },
   {
     "source": "hud",
@@ -2625,7 +2626,7 @@
     "state": "OH",
     "zip_code": "43614",
     "phone": "419-382-8196",
-    "email": "ckendall@b360mgt.com",
+    "email": "dphillips@b360mgt.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -3357,18 +3358,13 @@
     "state": "FL",
     "zip_code": "33136",
     "phone": "(305) 576-2167",
-    "email": "milette@acclaimcares.com",
+    "email": "ken@acclaimcares.com",
     "units": "",
     "price_range": "",
-    "bedrooms": [
-      "1br",
-      "2br",
-      "3br",
-      "4br"
-    ],
+    "bedrooms": [],
     "url": "https://www.google.com/search?q=TOWN%20PARK%20PLAZA%20SOUTH%201798%20NW%205th%20Ave%20Miami%20FL",
     "status": "ok",
-    "description": "LMSA · 1798 NW 5th Ave · Miami, FL 33136"
+    "description": "Section 8 · 1798 NW 5th Ave · Miami, FL 33136"
   },
   {
     "source": "hud",
@@ -3443,7 +3439,7 @@
     "state": "SC",
     "zip_code": "29620",
     "phone": "(865) 567-1096",
-    "email": "",
+    "email": "WendyM@dgaresidential.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -3842,7 +3838,9 @@
     "email": "mwenzel@namide.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "1br"
+    ],
     "url": "https://www.google.com/search?q=DIMA%20IV%20396%20Polly%20Drummond%20Hill%20Rd%20Newark%20DE",
     "status": "ok",
     "description": "PRAC/811 · 396 Polly Drummond Hill Rd · Newark, DE 19711"
@@ -3852,21 +3850,21 @@
     "hud_layer": "Multifamily Properties (Assisted)",
     "hud_program": "Section 8 / HUD Assisted",
     "title": "RIVERVIEW APARTMENTS",
-    "address": "102 E 2nd St",
-    "city": "Livermore",
-    "state": "KY",
-    "zip_code": "42352",
-    "phone": "270-278-2989",
-    "email": "sgraham@beaconproperty.com",
+    "address": "1 Golden Acres Dr",
+    "city": "Wilmington",
+    "state": "DE",
+    "zip_code": "19809",
+    "phone": "302-798-0921",
+    "email": "heather@livelove.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
-      "studio",
-      "1br"
+      "2br",
+      "3br"
     ],
-    "url": "https://www.google.com/search?q=RIVERVIEW%20APARTMENTS%20102%20E%202nd%20St%20Livermore%20KY",
+    "url": "https://www.google.com/search?q=RIVERVIEW%20APARTMENTS%201%20Golden%20Acres%20Dr%20Wilmington%20DE",
     "status": "ok",
-    "description": "202/8 NC · 102 E 2nd St · Livermore, KY 42352"
+    "description": "PD/8 Existing · 1 Golden Acres Dr · Wilmington, DE 19809"
   },
   {
     "source": "hud",
@@ -3881,9 +3879,7 @@
     "email": "jthomas@namide.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [
-      "studio"
-    ],
+    "bedrooms": [],
     "url": "https://www.google.com/search?q=DIMA%20III%20820%20N%20Madison%20St%20Wilmington%20DE",
     "status": "ok",
     "description": "PRAC/811 · 820 N Madison St · Wilmington, DE 19801"
@@ -3901,7 +3897,9 @@
     "email": "mwenzel@namide.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "1br"
+    ],
     "url": "https://www.google.com/search?q=DIMA%20VI%20201%20Murphy%20Rd%20Wilmington%20DE",
     "status": "ok",
     "description": "PRAC/811 · 201 Murphy Rd · Wilmington, DE 19803"
@@ -4040,7 +4038,7 @@
     "state": "DE",
     "zip_code": "19806",
     "phone": "302-654-4491",
-    "email": "jenee@pkmanagement.com",
+    "email": "cdupont@related.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -4815,20 +4813,21 @@
     "hud_layer": "Multifamily Properties (Assisted)",
     "hud_program": "Section 8 / HUD Assisted",
     "title": "HERITAGE HOUSE",
-    "address": "95 Dawson Ave",
-    "city": "Rockville",
-    "state": "MD",
-    "zip_code": "20850",
-    "phone": "301-762-8621",
-    "email": "sbudock@qpmgmt.com",
+    "address": "32 Low St",
+    "city": "Newburyport",
+    "state": "MA",
+    "zip_code": "01950",
+    "phone": "",
+    "email": "lkor@winnco.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
-      "1br"
+      "1br",
+      "2br"
     ],
-    "url": "https://www.google.com/search?q=HERITAGE%20HOUSE%2095%20Dawson%20Ave%20Rockville%20MD",
+    "url": "https://www.google.com/search?q=HERITAGE%20HOUSE%2032%20Low%20St%20Newburyport%20MA",
     "status": "ok",
-    "description": "HFDA/8 NC · 95 Dawson Ave · Rockville, MD 20850"
+    "description": "HFDA/8 NC · 32 Low St · Newburyport, MA 01950"
   },
   {
     "source": "hud",
@@ -4843,9 +4842,7 @@
     "email": "amhmood@arcunion.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [
-      "1br"
-    ],
+    "bedrooms": [],
     "url": "https://www.google.com/search?q=Mohawk%2FRunnymede%2056%20Mohawk%20Trl%20Westfield%20NJ",
     "status": "ok",
     "description": "PRAC/811 · 56 Mohawk Trl · Westfield, NJ 07090"
@@ -5392,20 +5389,20 @@
     "hud_layer": "Multifamily Properties (Assisted)",
     "hud_program": "Section 8 / HUD Assisted",
     "title": "ST. JUDE APARTMENTS",
-    "address": "50 Dana Ave",
-    "city": "Wynantskill",
+    "address": "4075 Lyell Rd",
+    "city": "Rochester",
     "state": "NY",
-    "zip_code": "12198",
-    "phone": "518 283-5690",
-    "email": "jill.mclellanphelps@rdca.org",
+    "zip_code": "14606",
+    "phone": "585 247 1060",
+    "email": "AFischer@Christopher-Community.org",
     "units": "",
     "price_range": "",
     "bedrooms": [
       "1br"
     ],
-    "url": "https://www.google.com/search?q=ST.%20JUDE%20APARTMENTS%2050%20Dana%20Ave%20Wynantskill%20NY",
+    "url": "https://www.google.com/search?q=ST.%20JUDE%20APARTMENTS%204075%20Lyell%20Rd%20Rochester%20NY",
     "status": "ok",
-    "description": "202/8 NC · 50 Dana Ave · Wynantskill, NY 12198"
+    "description": "PRAC/202 · 4075 Lyell Rd · Rochester, NY 14606"
   },
   {
     "source": "hud",
@@ -5506,7 +5503,9 @@
     "email": "lpress@jsddmetrowest.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "1br"
+    ],
     "url": "https://www.google.com/search?q=WEST%20CALDWELL%20GROUP%20HOME%207%20Essex%20Pl%20West%20Caldwell%20NJ",
     "status": "ok",
     "description": "PRAC/811 · 7 Essex Pl · West Caldwell, NJ 07006"
@@ -5746,9 +5745,7 @@
     "email": "skihara@thearcofdelaware.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [
-      "studio"
-    ],
+    "bedrooms": [],
     "url": "https://www.google.com/search?q=ARC%20HUD%20IV%20223%20E%20Seneca%20Dr%20Newark%20DE",
     "status": "ok",
     "description": "PRAC/811 · 223 E Seneca Dr · Newark, DE 19702"
@@ -5924,7 +5921,9 @@
     "email": "skihara@thearcofdelaware.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "studio"
+    ],
     "url": "https://www.google.com/search?q=ARC%20HUD%20VII%203607%20Mill%20Creek%20Rd%20Wilmington%20DE",
     "status": "ok",
     "description": "PRAC/811 · 3607 Mill Creek Rd · Wilmington, DE 19808"
@@ -5980,7 +5979,10 @@
     "email": "dcarbone@amsterdamhousingauthority.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "1br",
+      "2br"
+    ],
     "url": "https://www.google.com/search?q=Rivercrest%20Commons%20131%20Division%20St%20Amsterdam%20NY",
     "status": "ok",
     "description": "PRAC/811 · 131 Division St · Amsterdam, NY 12010"
@@ -6613,7 +6615,7 @@
     "state": "CT",
     "zip_code": "06605",
     "phone": "203-336-2812",
-    "email": "mcorthell@beaconcommunitiesllc.com",
+    "email": "acelella@vestacorp.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -8599,7 +8601,7 @@
     "state": "CA",
     "zip_code": "94608",
     "phone": "(510) 601-8235",
-    "email": "mlipscomb@bridgehousing.com",
+    "email": "cstevenson@avanath.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -8641,7 +8643,7 @@
     "state": "CA",
     "zip_code": "94703",
     "phone": "(510) 841-4595",
-    "email": "zcastaneda@sahahomes.org",
+    "email": "adan@sahahomes.org",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -8935,7 +8937,7 @@
     "state": "CA",
     "zip_code": "94804",
     "phone": "(510) 236-4935",
-    "email": "arbors@jsco.net",
+    "email": "ulaughlin@jsco.net",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -9284,22 +9286,21 @@
     "hud_layer": "Multifamily Properties (Assisted)",
     "hud_program": "Section 8 / HUD Assisted",
     "title": "Rosewood Apartments",
-    "address": "1700 Clark Rd",
-    "city": "Gary",
-    "state": "IN",
-    "zip_code": "46404",
-    "phone": "219-944-1314",
-    "email": "anikolic@frontlinerepartners.com",
+    "address": "318 W Forest Ave",
+    "city": "Round Lake",
+    "state": "IL",
+    "zip_code": "60073",
+    "phone": "(847) 546-6800",
+    "email": "kschreiber@tmo.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
       "1br",
-      "2br",
-      "3br"
+      "2br"
     ],
-    "url": "https://www.google.com/search?q=Rosewood%20Apartments%201700%20Clark%20Rd%20Gary%20IN",
+    "url": "https://www.google.com/search?q=Rosewood%20Apartments%20318%20W%20Forest%20Ave%20Round%20Lake%20IL",
     "status": "ok",
-    "description": "Sec 8 NC · 1700 Clark Rd · Gary, IN 46404"
+    "description": "LMSA · 318 W Forest Ave · Round Lake, IL 60073"
   },
   {
     "source": "hud",
@@ -9555,7 +9556,7 @@
     "state": "CA",
     "zip_code": "94608",
     "phone": "(510) 595-7822",
-    "email": "baybridge@jsco.net",
+    "email": "christopher.brown@jsco.net",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -9761,7 +9762,10 @@
     "email": "kcambi@jsco.net",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "1br",
+      "2br"
+    ],
     "url": "https://www.google.com/search?q=Caldera%20Place%202401%20Bonifacio%20St%20Concord%20CA",
     "status": "ok",
     "description": "PRAC/811 · 2401 Bonifacio St · Concord, CA 94520"
@@ -9838,7 +9842,7 @@
     "state": "CA",
     "zip_code": "94577",
     "phone": "(510) 553-9250",
-    "email": "Becky.Olivera@HumanGood.org",
+    "email": "",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -9941,7 +9945,10 @@
     "email": "racquel.lisan@jsco.net",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
+    "bedrooms": [
+      "1br",
+      "2br"
+    ],
     "url": "https://www.google.com/search?q=Eastmont%20Court%206850%20Foothill%20Blvd%20Oakland%20CA",
     "status": "ok",
     "description": "PRAC/811 · 6850 Foothill Blvd · Oakland, CA 94605"
@@ -10181,7 +10188,7 @@
     "state": "CA",
     "zip_code": "94607",
     "phone": "510-444-8942",
-    "email": "",
+    "email": "cstevenson@avanath.com",
     "units": "",
     "price_range": "",
     "bedrooms": [
@@ -10242,18 +10249,20 @@
     "hud_layer": "Multifamily Properties (Assisted)",
     "hud_program": "Section 8 / HUD Assisted",
     "title": "Estabrook Place",
-    "address": "",
-    "city": "",
+    "address": "2121 E 14th St",
+    "city": "San Leandro",
     "state": "CA",
-    "zip_code": "",
-    "phone": "",
-    "email": "",
+    "zip_code": "94577",
+    "phone": "(510) 347-5800",
+    "email": "tatiana.blank@edenhousing.org",
     "units": "",
     "price_range": "",
-    "bedrooms": [],
-    "url": "",
+    "bedrooms": [
+      "1br"
+    ],
+    "url": "https://www.google.com/search?q=Estabrook%20Place%202121%20E%2014th%20St%20San%20Leandro%20CA",
     "status": "ok",
-    "description": "HUD Multifamily Assisted · , CA"
+    "description": "PRAC/202 · 2121 E 14th St · San Leandro, CA 94577"
   },
   {
     "source": "hud",
@@ -10326,7 +10335,7 @@
     "state": "CA",
     "zip_code": "95138",
     "phone": "",
-    "email": "marisol.guinac@edenhousing.org",
+    "email": "Harley.Gaspar@edenhousing.org",
     "units": "",
     "price_range": "",
     "bedrooms": [
